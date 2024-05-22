@@ -7,6 +7,7 @@ import itertools
 import time
 from lucam import Lucam
 import tifffile as tf
+from tqdm import tqdm
 
 
 async def wait(second: float):
@@ -46,7 +47,7 @@ class PeriodicCapturer:
             self.outputfile,
             append=True,
         ) as tf_handler:
-            for _ in range(self.repeat):
+            for _ in tqdm(range(self.repeat), dest="Capturing ..."):
                 await asyncio.sleep(self.interval)
                 im = self.capture()
                 if im is None:
@@ -87,19 +88,41 @@ class MockCamera:
 
 def main():
     parser = argparse.ArgumentParser("mwt", description="")
-    parser.add_argument("-i", "--interval", type=float, default=125.0)
-    parser.add_argument("-t", "--time", type=float, default=600.0)
-    parser.add_argument("--run-after", type=float, default=0.0)
-    parser.add_argument("outdir", type=check_folder, metavar="OUTDIR")
-    parser.add_argument("--suffix", type=str, default="exp")
+    parser.add_argument(
+        "-i",
+        "--interval",
+        type=float,
+        default=0.125,
+        help="Time interval between each snapshot (sec, float)",
+    )
+    parser.add_argument(
+        "-t",
+        "--time",
+        type=float,
+        default=600.0,
+        help="Total acquisition time (sec, float)",
+    )
+    parser.add_argument(
+        "--run-after",
+        type=float,
+        default=0.0,
+        help="Idling time before acquisition(sec, float)",
+    )
+    parser.add_argument(
+        "outdir",
+        type=check_folder,
+        metavar="OUTDIR",
+        help="The output directory for saving multi-stack tiff",
+    )
+    parser.add_argument(
+        "--suffix", type=str, default="exp", help="filename suffix (default: exp)"
+    )
 
     args = parser.parse_args()
-    print(args)
-    camera = None
+
     ## init camera
     # camera = MockCamera(r"C:\Users\kuan\Projects\mwt-capture\data")
-
-    camera = Lucam(1)
+    camera = Lucam(1) or None
     # snapshot.format = camera.GetFormat()[0]
     # snapshot.exposure = camera.GetProperty("exposure")[0]
     # snapshot.gain = camera.GetProperty("gain")[0]
@@ -114,24 +137,29 @@ def main():
     # snapshot.shutterType = 0
     # snapshot.exposureDelay = 0.0
     # snapshot.bufferlastframe = 0
-    # camera.snapshot =
 
+    if camera is None:
+        raise IOError("Fail to connect to camera")
+
+    repeat = round(args.time / args.interval) + 1
     properties = camera.default_snapshot()
-    # properties = None
-    loop = asyncio.get_event_loop()
-    capture = PeriodicCapturer(
+
+    capturer = PeriodicCapturer(
         outdir=args.outdir,
         suffix=args.suffix,
         camera=camera,
         properties=properties,
-        interval=0.05,
-        repeat=100,
+        interval=args.interval,
+        repeat=repeat,
     )
-    # start capture after setting.
-    loop.run_until_complete(wait(args.run_after))
+
+    loop = asyncio.get_event_loop()
+    # start capture after waiting.
+    if args.run_after > 0:
+        loop.run_until_complete(wait(args.run_after))
 
     # start capture
-    loop.run_until_complete(capture.start())
+    loop.run_until_complete(capturer.start())
 
 
 if __name__ == "__main__":

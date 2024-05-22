@@ -8,6 +8,7 @@ authors = [
 dependencies = [
     "lucam>=2022.9.27",
     "tifffile[all]>=2024.5.10",
+    "tqdm>=4.66.4",
 ]
 readme = "README.md"
 requires-python = ">= 3.8"
