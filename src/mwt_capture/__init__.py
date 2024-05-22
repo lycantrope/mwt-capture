@@ -146,6 +146,20 @@ def main():
         "--suffix", type=str, default="exp", help="filename suffix (default: exp)"
     )
 
+    parser.add_argument(
+        "--exposure",
+        type=float,
+        default=50.0,
+        help="exposure time (ms)",
+    )
+
+    parser.add_argument(
+        "--gain",
+        type=float,
+        default=0.0,
+        help="Camera Gain",
+    )
+
     args = parser.parse_args()
 
     ## init camera
@@ -159,8 +173,8 @@ def main():
     properties = camera.default_snapshot()
     # the parameter width 2592, height 1944, exposure 70.131, gain 0.375 from PC
     # properties.ex
-    properties.exposure = 70.131
-    properties.gain = 0.375
+    properties.exposure = args.exposure
+    properties.gain = args.gain
     properties.shutterType = API.LUCAM_SHUTTER_TYPE_ROLLING
     print(properties)
 
