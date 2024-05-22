@@ -48,6 +48,8 @@ class PeriodicCapturer:
             self.outputfile,
             append=True,
         ) as tf_handler:
+            self.camera.EnableFastFrames(self.properties)
+
             for _ in tqdm(range(self.repeat), desc="Acqusition"):
                 await asyncio.sleep(self.interval)
                 im = self.capture()
@@ -66,7 +68,7 @@ class PeriodicCapturer:
             print("test")
             return None
         # numpy array
-        return self.camera.TakeSnapshot(self.properties)
+        return self.camera.TakeFastFrame()
 
 
 def check_folder(path: str):
