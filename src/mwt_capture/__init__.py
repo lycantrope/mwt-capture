@@ -161,6 +161,7 @@ def main():
     # properties.ex
     properties.exposure = 70.131
     properties.gain = 0.375
+    properties.shutterType = API.LUCAM_SHUTTER_TYPE_ROLLING
     print(properties)
 
     # set camera to 8 bit VGA mode at low framerate
