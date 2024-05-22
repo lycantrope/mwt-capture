@@ -51,9 +51,12 @@ class PeriodicCapturer:
             try:
                 self.camera.EnableFastFrames(self.properties)
 
-                for _ in tqdm(range(self.repeat), desc="Acqusition"):
-                    await asyncio.sleep(self.interval)
-                    im = await self.capture()
+                t0 = time.monotonic_ns()
+                for i in tqdm(range(self.repeat), desc="Acqusition"):
+                    while (time.monotonic_ns() - t0) < (self.interval * 1e9) * i:
+                        await asyncio.sleep(self.interval / 50)
+
+                    im = self.capture()
                     if im is None:
                         print("test")
                         continue
@@ -66,7 +69,7 @@ class PeriodicCapturer:
             finally:
                 self.camera.DisableFastFrames()
 
-    async def capture(self):
+    def capture(self):
         if self.camera is None:
             print("test")
             return None
