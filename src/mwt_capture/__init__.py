@@ -61,55 +61,27 @@ class PeriodicCapturer:
         properties: Lucam.Snapshot,
     ):
         filename = datetime.now().strftime(f"%Y%m%d_%H%M%S_{suffix}.tif")
-        self.outputfile = outdir.joinpath(filename)
         self.interval = interval
         self.repeat = repeat
-        # self.queue = mp.Queue(maxsize=128)
-        # self.file_writer = FileWriter(self.outputfile, self.queue)
+        self.queue = mp.Queue(maxsize=128)
+        self.file_writer = FileWriter(outdir.joinpath(filename), self.queue)
         self.camera = camera
         self.properties = properties
 
     async def start(self):
-        # # run a callback function during snapshot
-        # def snapshot_callback(context, data, size):
-        #     data[0] = 42
-        #     print('Snapshot callback function:', context, data[:2], size)
-
-        # callbackid = lucam.AddSnapshotCallback(snapshot_callback)
-        # image = lucam.TakeSnapshot()
-        # assert image[0, 0] == 42
-        # lucam.RemoveSnapshotCallback(callbackid)
-        with tf.TiffWriter(
-            self.outputfile,
-            append=True,
-        ) as tf_handler:
-
-            def snapshot_callback(context, data, size):
-                if data.ndim == 3:
-                    # convert rgb to grayscale
-                    data = np.dot(
-                        data[..., :3].astype("f8"), [0.2989, 0.5870, 0.1140]
-                    ).astype("u1")
-
-                context[0].write(data, datetime=True, compression="LZW")
-
-            callbackid = self.camera.AddSnapshotCallback(
-                snapshot_callback, context=(tf_handler,)
-            )
-            try:
-                self.camera.EnableFastFrames(self.properties)
-                self.file_writer.start()
-                t0 = time.monotonic_ns()
-                for i in tqdm(range(self.repeat), desc="Acqusition"):
-                    while (time.monotonic_ns() - t0) < (self.interval * 1e9) * i:
-                        await asyncio.sleep(self.interval / 50)
-                    im = self.capture()
-                    # self.queue.put_nowait((True, im))
-            finally:
-                self.camera.DisableFastFrames()
-                self.camera.RemoveSnapshotCallback(callbackid)
-                # self.queue.put_nowait((False, None))
-                # self.file_writer.join()
+        try:
+            self.camera.EnableFastFrames(self.properties)
+            self.file_writer.start()
+            t0 = time.monotonic_ns()
+            for i in tqdm(range(self.repeat), desc="Acqusition"):
+                while (time.monotonic_ns() - t0) < (self.interval * 1e9) * i:
+                    await asyncio.sleep(self.interval / 50)
+                im = self.capture()
+                self.queue.put_nowait((True, im))
+        finally:
+            self.camera.DisableFastFrames()
+            self.queue.put_nowait((False, None))
+            self.file_writer.join()
 
     def capture(self):
         if self.camera is None:
@@ -183,7 +155,7 @@ def main():
     if camera is None:
         raise IOError("Fail to connect to camera")
 
-    repeat = round(args.time / args.interval) + 1
+    repeat = round(args.time / args.interval)
     properties = camera.default_snapshot()
     # the parameter width 2592, height 1944, exposure 70.131, gain 0.375 from PC
     # properties.ex
