@@ -62,7 +62,7 @@ class PeriodicCapturer:
         filename = datetime.now().strftime(f"%Y%m%d_%H%M%S_{suffix}.tif")
         self.interval = interval
         self.repeat = repeat
-        self.queue = mp.Queue(maxsize=24)
+        self.queue = mp.Queue(maxsize=128)
         self.file_writer = FileWriter(outdir.joinpath(filename), self.queue)
         self.camera = camera
         self.properties = properties
@@ -76,10 +76,10 @@ class PeriodicCapturer:
                 while (time.monotonic_ns() - t0) < (self.interval * 1e9) * i:
                     await asyncio.sleep(self.interval / 50)
                 im = self.capture()
-                self.queue.put((True, im))
+                self.queue.put_nowait((True, im))
         finally:
             self.camera.DisableFastFrames()
-            self.queue.push((False, None))
+            self.queue.put_nowait((False, None))
             self.file_writer.join()
 
     def capture(self):
