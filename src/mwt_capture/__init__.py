@@ -143,6 +143,11 @@ def main():
 
     repeat = round(args.time / args.interval) + 1
     properties = camera.default_snapshot()
+    # the parameter width 2592, height 1944, exposure 70.131, gain 0.375 from PC
+    # properties.ex
+    properties.exposure = 70.131
+    properties.gain = 0.375
+    print(properties)
 
     capturer = PeriodicCapturer(
         outdir=args.outdir,
