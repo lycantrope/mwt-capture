@@ -9,6 +9,30 @@ from lucam import Lucam
 import tifffile as tf
 from tqdm import tqdm
 import numpy as np
+import multiprocessing as mp
+
+
+class FileWriter(mp.Process):
+    def __init__(self, outputfile: Path, queue: mp.Queue):
+        super().__init__(daemon=True)
+        self.outputfile = outputfile
+        self.queue = queue
+
+    def run(self):
+        with tf.TiffWriter(
+            self.outputfile,
+            append=True,
+        ) as tf_handler:
+            while True:
+                ret, im = self.queue.get(True)
+                if not ret:
+                    break
+                if im.ndim == 3:
+                    # convert rgb to grayscale
+                    im = np.dot(
+                        im[..., :3].astype("f8"), [0.2989, 0.5870, 0.1140]
+                    ).astype("u1")
+                tf_handler.write(im, datetime=True, compression="LZW")
 
 
 async def wait(second: float):
@@ -36,38 +60,27 @@ class PeriodicCapturer:
         properties: Lucam.Snapshot,
     ):
         filename = datetime.now().strftime(f"%Y%m%d_%H%M%S_{suffix}.tif")
-        self.outputfile = outdir.joinpath(filename)
         self.interval = interval
         self.repeat = repeat
-
+        self.queue = mp.Queue(maxsize=24)
+        self.file_writer = FileWriter(outdir.joinpath(filename), self.queue)
         self.camera = camera
         self.properties = properties
 
     async def start(self):
-        with tf.TiffWriter(
-            self.outputfile,
-            append=True,
-        ) as tf_handler:
-            try:
-                self.camera.EnableFastFrames(self.properties)
-
-                t0 = time.monotonic_ns()
-                for i in tqdm(range(self.repeat), desc="Acqusition"):
-                    while (time.monotonic_ns() - t0) < (self.interval * 1e9) * i:
-                        await asyncio.sleep(self.interval / 50)
-
-                    im = self.capture()
-                    if im is None:
-                        print("test")
-                        continue
-                    if im.ndim == 3:
-                        # convert rgb to grayscale
-                        im = np.dot(
-                            im[..., :3].astype("f8"), [0.2989, 0.5870, 0.1140]
-                        ).astype("u1")
-                    tf_handler.write(im, datetime=True, compression="LZW")
-            finally:
-                self.camera.DisableFastFrames()
+        try:
+            self.camera.EnableFastFrames(self.properties)
+            self.file_writer.start()
+            t0 = time.monotonic_ns()
+            for i in tqdm(range(self.repeat), desc="Acqusition"):
+                while (time.monotonic_ns() - t0) < (self.interval * 1e9) * i:
+                    await asyncio.sleep(self.interval / 50)
+                im = self.capture()
+                self.queue.put((True, im))
+        finally:
+            self.camera.DisableFastFrames()
+            self.queue.push((False, None))
+            self.file_writer.join()
 
     def capture(self):
         if self.camera is None:
