@@ -5,11 +5,12 @@ from datetime import datetime
 import sys
 import itertools
 import time
-from lucam import Lucam
 import tifffile as tf
 from tqdm import tqdm
 import numpy as np
 import multiprocessing as mp
+
+from lucam import Lucam, API
 
 
 class FileWriter(mp.Process):
@@ -60,27 +61,55 @@ class PeriodicCapturer:
         properties: Lucam.Snapshot,
     ):
         filename = datetime.now().strftime(f"%Y%m%d_%H%M%S_{suffix}.tif")
+        self.outputfile = outdir.joinpath(filename)
         self.interval = interval
         self.repeat = repeat
-        self.queue = mp.Queue(maxsize=128)
-        self.file_writer = FileWriter(outdir.joinpath(filename), self.queue)
+        # self.queue = mp.Queue(maxsize=128)
+        # self.file_writer = FileWriter(self.outputfile, self.queue)
         self.camera = camera
         self.properties = properties
 
     async def start(self):
-        try:
-            self.camera.EnableFastFrames(self.properties)
-            self.file_writer.start()
-            t0 = time.monotonic_ns()
-            for i in tqdm(range(self.repeat), desc="Acqusition"):
-                while (time.monotonic_ns() - t0) < (self.interval * 1e9) * i:
-                    await asyncio.sleep(self.interval / 50)
-                im = self.capture()
-                self.queue.put_nowait((True, im))
-        finally:
-            self.camera.DisableFastFrames()
-            self.queue.put_nowait((False, None))
-            self.file_writer.join()
+        # # run a callback function during snapshot
+        # def snapshot_callback(context, data, size):
+        #     data[0] = 42
+        #     print('Snapshot callback function:', context, data[:2], size)
+
+        # callbackid = lucam.AddSnapshotCallback(snapshot_callback)
+        # image = lucam.TakeSnapshot()
+        # assert image[0, 0] == 42
+        # lucam.RemoveSnapshotCallback(callbackid)
+        with tf.TiffWriter(
+            self.outputfile,
+            append=True,
+        ) as tf_handler:
+
+            def snapshot_callback(context, data, size):
+                if data.ndim == 3:
+                    # convert rgb to grayscale
+                    data = np.dot(
+                        data[..., :3].astype("f8"), [0.2989, 0.5870, 0.1140]
+                    ).astype("u1")
+
+                context[0].write(data, datetime=True, compression="LZW")
+
+            callbackid = self.camera.AddSnapshotCallback(
+                snapshot_callback, context=(tf_handler,)
+            )
+            try:
+                self.camera.EnableFastFrames(self.properties)
+                self.file_writer.start()
+                t0 = time.monotonic_ns()
+                for i in tqdm(range(self.repeat), desc="Acqusition"):
+                    while (time.monotonic_ns() - t0) < (self.interval * 1e9) * i:
+                        await asyncio.sleep(self.interval / 50)
+                    im = self.capture()
+                    # self.queue.put_nowait((True, im))
+            finally:
+                self.camera.DisableFastFrames()
+                self.camera.RemoveSnapshotCallback(callbackid)
+                # self.queue.put_nowait((False, None))
+                # self.file_writer.join()
 
     def capture(self):
         if self.camera is None:
@@ -150,20 +179,6 @@ def main():
     ## init camera
     # camera = MockCamera(r"C:\Users\kuan\Projects\mwt-capture\data")
     camera = Lucam(1) or None
-    # snapshot.format = camera.GetFormat()[0]
-    # snapshot.exposure = camera.GetProperty("exposure")[0]
-    # snapshot.gain = camera.GetProperty("gain")[0]
-    # snapshot.timeout = 1000.0
-    # snapshot.gainRed = 1.0
-    # snapshot.gainBlue = 1.0
-    # snapshot.gainGrn1 = 1.0
-    # snapshot.gainGrn2 = 1.0
-    # snapshot.useStrobe = False
-    # snapshot.strobeDelay = 0.0
-    # snapshot.useHwTrigger = 0
-    # snapshot.shutterType = 0
-    # snapshot.exposureDelay = 0.0
-    # snapshot.bufferlastframe = 0
 
     if camera is None:
         raise IOError("Fail to connect to camera")
@@ -175,6 +190,22 @@ def main():
     properties.exposure = 70.131
     properties.gain = 0.375
     print(properties)
+
+    # set camera to 8 bit VGA mode at low framerate
+    camera.SetFormat(
+        Lucam.FrameFormat(
+            0,
+            0,
+            2592,
+            1944,
+            API.LUCAM_PF_8,
+            binningX=1,
+            flagsX=1,
+            binningY=1,
+            flagsY=1,
+        ),
+        framerate=1.0 / args.interval,
+    )
 
     capturer = PeriodicCapturer(
         outdir=args.outdir,
