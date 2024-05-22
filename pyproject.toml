@@ -1,0 +1,30 @@
+[project]
+name = "mwt-capture"
+version = "0.1.0"
+description = "Add your description here"
+authors = [
+    { name = "Chung-Kuan Chen", email = "b97b01045@gmail.com" }
+]
+dependencies = [
+    "lucam>=2022.9.27",
+    "tifffile[all]>=2024.5.10",
+]
+readme = "README.md"
+requires-python = ">= 3.8"
+
+[project.scripts]
+mwt-capture = "mwt_capture:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.rye]
+managed = true
+dev-dependencies = []
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/mwt_capture"]
