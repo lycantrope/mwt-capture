@@ -8,6 +8,7 @@ import time
 from lucam import Lucam
 import tifffile as tf
 from tqdm import tqdm
+import numpy as np
 
 
 async def wait(second: float):
@@ -47,12 +48,15 @@ class PeriodicCapturer:
             self.outputfile,
             append=True,
         ) as tf_handler:
-            for _ in tqdm(range(self.repeat), dest="Capturing ..."):
+            for _ in tqdm(range(self.repeat), desc="Acqusition"):
                 await asyncio.sleep(self.interval)
                 im = self.capture()
                 if im is None:
                     print("test")
                     continue
+                if im.ndim == 3:
+                    # convert rgb to grayscale
+                    im = np.dot(im[..., :3], [0.2989, 0.5870, 0.1140])
                 tf_handler.write(im, datetime=True, compression="LZW")
 
     def capture(self):
