@@ -48,22 +48,25 @@ class PeriodicCapturer:
             self.outputfile,
             append=True,
         ) as tf_handler:
-            self.camera.EnableFastFrames(self.properties)
+            try:
+                self.camera.EnableFastFrames(self.properties)
 
-            for _ in tqdm(range(self.repeat), desc="Acqusition"):
-                await asyncio.sleep(self.interval)
-                im = self.capture()
-                if im is None:
-                    print("test")
-                    continue
-                if im.ndim == 3:
-                    # convert rgb to grayscale
-                    im = np.dot(
-                        im[..., :3].astype("f8"), [0.2989, 0.5870, 0.1140]
-                    ).astype("u1")
-                tf_handler.write(im, datetime=True, compression="LZW")
+                for _ in tqdm(range(self.repeat), desc="Acqusition"):
+                    await asyncio.sleep(self.interval)
+                    im = await self.capture()
+                    if im is None:
+                        print("test")
+                        continue
+                    if im.ndim == 3:
+                        # convert rgb to grayscale
+                        im = np.dot(
+                            im[..., :3].astype("f8"), [0.2989, 0.5870, 0.1140]
+                        ).astype("u1")
+                    tf_handler.write(im, datetime=True, compression="LZW")
+            finally:
+                self.camera.DisableFastFrames()
 
-    def capture(self):
+    async def capture(self):
         if self.camera is None:
             print("test")
             return None
