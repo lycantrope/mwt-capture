@@ -56,7 +56,9 @@ class PeriodicCapturer:
                     continue
                 if im.ndim == 3:
                     # convert rgb to grayscale
-                    im = np.dot(im[..., :3], [0.2989, 0.5870, 0.1140])
+                    im = np.dot(
+                        im[..., :3].astype("f8"), [0.2989, 0.5870, 0.1140]
+                    ).astype("u1")
                 tf_handler.write(im, datetime=True, compression="LZW")
 
     def capture(self):
