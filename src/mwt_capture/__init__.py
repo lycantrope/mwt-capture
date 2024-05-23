@@ -274,26 +274,39 @@ def main():
     writer.start()
 
     duration_ns = args.time * 1e9
-    t0 = time.monotonic_ns()
     try:
 
         def streaming_callback(context, data, size):
             print("Streaming callback function:", context, data[:2], size)
 
-        callbackid = camera.AddStreamingCallback(streaming_callback)
+        # callbackid = camera.AddStreamingCallback(streaming_callback)
         camera.StreamVideoControl("start_streaming")
+        t0 = time.monotonic_ns()
         # begin
         writer.set()
-        while (time.monotonic_ns() - t0) < duration_ns:
+        msg = f"Elapse Time: {0:.3f} (sec)"
+        sys.stdout.write(msg)
+        sys.stdout.flush()
+        while True:
+            dt = time.monotonic_ns() - t0
+            if dt >= duration_ns:
+                break
+            sys.stdout.write("\033[2K\033[1G")
             buf = camera.TakeVideo(7)  # take 7 frames per second
             for im in buf:
                 queue.put((True, im))
+
+            msg = f"Elapse Time: {dt*1e-9:.3f} (sec)"
+            sys.stdout.write(msg)
+            sys.stdout.flush()
+
     finally:
         queue.put((False, None))
-        camera.RemoveStreamingCallback(callbackid)
+        # camera.RemoveStreamingCallback(callbackid)
         camera.StreamVideoControl("stop_streaming")
 
     writer.join()
+    print(f"TIFF file was save at: {outputfile}")
 
 
 def check_burst():
