@@ -1,8 +1,6 @@
 import argparse
 import asyncio
-from collections import deque
-import ctypes
-import io
+
 from pathlib import Path
 from datetime import datetime
 import sys
@@ -22,8 +20,15 @@ class FileWriter(mp.Process):
         super().__init__(daemon=True)
         self.outputfile = outputfile
         self.queue = queue
+        self.is_start = mp.Event()
+
+    def set(self):
+        self.is_start.set()
 
     def run(self):
+        while not self.is_start.is_set():
+            time.sleep(0.1)
+
         with tf.TiffWriter(
             self.outputfile,
             append=True,
@@ -209,7 +214,6 @@ def main():
         print(e)
         return
 
-    repeat = round(args.time / args.interval)
     properties = camera.default_snapshot()
     # the parameter width 2592, height 1944, exposure 70.131, gain 0.375 from PC
     # properties.ex
@@ -243,33 +247,37 @@ def main():
     #     repeat=repeat,
     # )
 
-    loop = asyncio.get_event_loop()
     # start capture after waiting.
     if args.run_after > 0:
-        loop.run_until_complete(wait(args.run_after))
+        time.sleep(args.run_after)
 
     # # start capture
     # loop.run_until_complete(capturer.start())
-    stream = VideoStreaming(
-        camera,
-        duration=args.duration,
-    )
-    stream.start()
 
     filename = datetime.now().strftime(f"%Y%m%d_%H%M%S_{args.suffix}.tif")
+
+    queue = mp.Queue(64)
+
     outputfile = args.outdir.joinpath(filename)
 
-    with tf.TiffWriter(
-        outputfile,
-        append=True,
-    ) as tf_handler:
-        for im in stream.get_stream():
-            if im.ndim == 3:
-                # convert rgb to grayscale
-                im = np.dot(im[..., :3].astype("f8"), [0.2989, 0.5870, 0.1140]).astype(
-                    "u1"
-                )
-            tf_handler.write(im, datetime=True, compression="LZW")
+    writer = FileWriter(outputfile, queue)
+    writer.start()
+
+    duration_ns = args.time * 1e9
+    t0 = time.monotonic_ns()
+    try:
+        camera.StreamVideoControl("start_streaming")
+        # begin
+        writer.set()
+        while (time.monotonic_ns() - t0) < duration_ns:
+            buf = camera.TakeVideo(7)  # take 7 frames per second
+            for im in buf:
+                queue.put((True, im))
+    finally:
+        queue.put((False, None))
+        camera.StreamVideoControl("stop_streaming")
+
+    writer.join()
 
 
 def check_burst():
@@ -322,7 +330,7 @@ def check_framerate():
             for nframe in range(4, 17):
                 camera.StreamVideoControl("start_streaming")
                 t0 = time.monotonic_ns()
-                video = camera.TakeVideo(nframe)  # take a 8 frames video
+                _ = camera.TakeVideo(nframe)  # take a 8 frames video
                 print(
                     f"rate:{rate:f}, nframe:{nframe:d}, t: {(time.monotonic_ns() - t0)*1e-9:.3f} s"
                 )
