@@ -11,6 +11,7 @@ import numpy as np
 import multiprocessing as mp
 
 from lucam import Lucam, API
+from lucam.lucam import LucamError
 
 
 class FileWriter(mp.Process):
@@ -164,10 +165,11 @@ def main():
 
     ## init camera
     # camera = MockCamera(r"C:\Users\kuan\Projects\mwt-capture\data")
-    camera = Lucam(1) or None
-
-    if camera is None:
-        raise IOError("Fail to connect to camera")
+    try:
+        camera = Lucam(1)
+    except LucamError as e:
+        print(e)
+        return
 
     repeat = round(args.time / args.interval)
     properties = camera.default_snapshot()
@@ -210,6 +212,21 @@ def main():
 
     # start capture
     loop.run_until_complete(capturer.start())
+
+
+def check_burst():
+    try:
+        camera = Lucam(1)
+    except LucamError as e:
+        print(e)
+        return
+
+    API.LUCAM_PROP_SNAPSHOT_COUNT = 120
+    try:
+        ret = camera.GetProperty(API.LUCAM_PROP_SNAP_COUNT)
+        print(ret)
+    except Exception as e:
+        print(e)
 
 
 if __name__ == "__main__":
