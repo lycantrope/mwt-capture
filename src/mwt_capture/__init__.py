@@ -284,28 +284,25 @@ def main():
         t0 = time.monotonic_ns()
         # begin
         writer.set()
-        msg = f"Elapse Time: {0:.3f} (sec)"
-        sys.stdout.write(msg)
-        sys.stdout.flush()
-        while True:
-            dt = time.monotonic_ns() - t0
-            if dt >= duration_ns:
-                break
-            sys.stdout.write("\033[2K\033[1G")
+        dt = 0.0
+        while dt < duration_ns:
+            msg = f"Elapse Time: {0:.3f} (sec)"
+            sys.stdout.write(msg)
+            sys.stdout.flush()
             buf = camera.TakeVideo(7)  # take 7 frames per second
             for im in buf:
                 queue.put((True, im))
-
-            msg = f"Elapse Time: {dt*1e-9:.3f} (sec)"
-            sys.stdout.write(msg)
-            sys.stdout.flush()
-
+            sys.stdout.write("\033[2K\033[1G")
+            dt = time.monotonic_ns() - t0
     finally:
         queue.put((False, None))
         # camera.RemoveStreamingCallback(callbackid)
         camera.StreamVideoControl("stop_streaming")
 
     writer.join()
+    dt = time.monotonic_ns() - t0
+    msg = f"Elapse Time: {dt*1e-9:.3f} (sec)"
+    print(msg)
     print(f"TIFF file was save at: {outputfile}")
 
 
