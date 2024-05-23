@@ -266,7 +266,7 @@ def check_framerate():
         try:
             for nframe in range(4, 17):
                 camera.StreamVideoControl("start_streaming")
-                t0 = time.monotonic()
+                t0 = time.monotonic_ns()
                 video = camera.TakeVideo(nframe)  # take a 8 frames video
                 print(
                     f"rate:{rate:f}, nframe:{nframe:d}, t: {(time.monotonic_ns() - t0)*1e-9:.3f} s"
