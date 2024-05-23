@@ -286,7 +286,7 @@ def main():
         writer.set()
         dt = 0.0
         while dt < duration_ns:
-            msg = f"Elapse Time: {0:.3f} (sec)"
+            msg = f"Elapse Time: {dt:.3f} (sec)"
             sys.stdout.write(msg)
             sys.stdout.flush()
             buf = camera.TakeVideo(7)  # take 7 frames per second
