@@ -10,14 +10,21 @@
 -e file:.
 asciitree==0.3.3
     # via zarr
+asttokens==2.4.1
+    # via stack-data
 colorama==0.4.6
+    # via ipython
     # via tqdm
 contourpy==1.2.1
     # via matplotlib
 cycler==0.12.1
     # via matplotlib
+decorator==5.1.1
+    # via ipython
 defusedxml==0.7.1
     # via tifffile
+executing==2.0.1
+    # via stack-data
 fasteners==0.19
     # via zarr
 fonttools==4.51.0
@@ -26,6 +33,9 @@ fsspec==2024.5.0
     # via tifffile
 imagecodecs==2024.1.1
     # via tifffile
+ipython==8.24.0
+jedi==0.19.1
+    # via ipython
 kiwisolver==1.4.5
     # via matplotlib
 lucam==2022.9.27
@@ -34,6 +44,8 @@ lxml==5.2.2
     # via tifffile
 matplotlib==3.9.0
     # via tifffile
+matplotlib-inline==0.1.7
+    # via ipython
 numcodecs==0.12.1
     # via zarr
 numpy==1.26.4
@@ -46,17 +58,33 @@ numpy==1.26.4
     # via zarr
 packaging==24.0
     # via matplotlib
+parso==0.8.4
+    # via jedi
 pillow==10.3.0
     # via matplotlib
+prompt-toolkit==3.0.43
+    # via ipython
+pure-eval==0.2.2
+    # via stack-data
+pygments==2.18.0
+    # via ipython
 pyparsing==3.1.2
     # via matplotlib
 python-dateutil==2.9.0.post0
     # via matplotlib
 six==1.16.0
+    # via asttokens
     # via python-dateutil
+stack-data==0.6.3
+    # via ipython
 tifffile==2024.5.10
     # via mwt-capture
 tqdm==4.66.4
     # via mwt-capture
+traitlets==5.14.3
+    # via ipython
+    # via matplotlib-inline
+wcwidth==0.2.13
+    # via prompt-toolkit
 zarr==2.18.1
     # via tifffile

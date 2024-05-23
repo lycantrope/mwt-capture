@@ -16,6 +16,7 @@ requires-python = ">= 3.8"
 [project.scripts]
 mwt-capture = "mwt_capture:main"
 mwt-check = "mwt_capture:check_burst"
+mwt-check-framerate = "mwt_capture:check_framerate"
 
 [build-system]
 requires = ["hatchling"]
@@ -23,7 +24,9 @@ build-backend = "hatchling.build"
 
 [tool.rye]
 managed = true
-dev-dependencies = []
+dev-dependencies = [
+    "ipython>=8.24.0",
+]
 
 [tool.hatch.metadata]
 allow-direct-references = true
