@@ -1,6 +1,7 @@
 import argparse
 import asyncio
 
+import contextlib
 from pathlib import Path
 from datetime import datetime
 import sys
@@ -13,6 +14,15 @@ import multiprocessing as mp
 
 from lucam import Lucam, API
 from lucam.lucam import LucamError
+
+
+@contextlib.contextmanager
+def timer(msg="func"):
+    t0 = time.monotonic()
+    try:
+        yield
+    finally:
+        print(f"{msg}|{time.monotonic() - t0:.3f} (sec)")
 
 
 class FileWriter(mp.Process):
@@ -266,6 +276,11 @@ def main():
     duration_ns = args.time * 1e9
     t0 = time.monotonic_ns()
     try:
+
+        def streaming_callback(context, data, size):
+            print("Streaming callback function:", context, data[:2], size)
+
+        callbackid = camera.AddStreamingCallback(streaming_callback)
         camera.StreamVideoControl("start_streaming")
         # begin
         writer.set()
@@ -275,6 +290,7 @@ def main():
                 queue.put((True, im))
     finally:
         queue.put((False, None))
+        camera.RemoveStreamingCallback(callbackid)
         camera.StreamVideoControl("stop_streaming")
 
     writer.join()
