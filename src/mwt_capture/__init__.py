@@ -1,5 +1,6 @@
 import argparse
 import asyncio
+from collections import deque
 import ctypes
 import io
 from pathlib import Path
@@ -117,6 +118,41 @@ class MockCamera:
         return im
 
 
+class VideoStreaming(mp.Process):
+    def __init__(self, camera: Lucam, duration: float):
+        super().__init__(daemon=True)
+        self.camera = camera
+        self.queue = mp.Queue(128)
+        self.duration = duration  # second
+        self.is_start = mp.Event()
+
+    def get_stream(self):
+        if not self.is_start.is_set():
+            raise RuntimeError(
+                "This thread was not started. Call `start()` before `get_stream()`"
+            )
+        while True:
+            ret, stack = self.queue.get(True)
+            if not ret:
+                break
+            for im in stack:
+                yield im
+
+    def run(self) -> None:
+        self.is_start.set()
+        duration_ns = self.duration * 1e9
+        try:
+            t0 = time.monotonic_ns()
+            while (time.monotonic_ns() - t0) < duration_ns:
+                self.camera.StreamVideoControl("start_streaming")
+                buf = self.camera.TakeVideo(7)  # take 7 frames per second
+                self.queue.put((True, buf))
+        finally:
+            self.queue.put((False, None))
+            self.is_start.clear()
+            self.camera.StreamVideoControl("stop_streaming")
+
+
 def main():
     parser = argparse.ArgumentParser("mwt", description="")
     parser.add_argument(
@@ -198,22 +234,42 @@ def main():
         framerate=1.0 / args.interval,
     )
 
-    capturer = PeriodicCapturer(
-        outdir=args.outdir,
-        suffix=args.suffix,
-        camera=camera,
-        properties=properties,
-        interval=args.interval,
-        repeat=repeat,
-    )
+    # capturer = PeriodicCapturer(
+    #     outdir=args.outdir,
+    #     suffix=args.suffix,
+    #     camera=camera,
+    #     properties=properties,
+    #     interval=args.interval,
+    #     repeat=repeat,
+    # )
 
     loop = asyncio.get_event_loop()
     # start capture after waiting.
     if args.run_after > 0:
         loop.run_until_complete(wait(args.run_after))
 
-    # start capture
-    loop.run_until_complete(capturer.start())
+    # # start capture
+    # loop.run_until_complete(capturer.start())
+    stream = VideoStreaming(
+        camera,
+        duration=args.duration,
+    )
+    stream.start()
+
+    filename = datetime.now().strftime(f"%Y%m%d_%H%M%S_{args.suffix}.tif")
+    outputfile = args.outdir.joinpath(filename)
+
+    with tf.TiffWriter(
+        outputfile,
+        append=True,
+    ) as tf_handler:
+        for im in stream.get_stream():
+            if im.ndim == 3:
+                # convert rgb to grayscale
+                im = np.dot(im[..., :3].astype("f8"), [0.2989, 0.5870, 0.1140]).astype(
+                    "u1"
+                )
+            tf_handler.write(im, datetime=True, compression="LZW")
 
 
 def check_burst():
@@ -260,7 +316,6 @@ def check_framerate():
                 binningY=1,
                 flagsY=1,
             ),
-            framerate=float(rate),
         )
 
         try:
