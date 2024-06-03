@@ -323,7 +323,7 @@ def main():
                 queue.put((True, buf))
                 # idling if the TakeVideo is faster than interval
                 while time.monotonic() - tmp < args.interval:
-                    time.sleep(args.interval / 50.0)
+                    time.sleep(0.005)
 
                 sys.stdout.write("\033[2K\033[1G")
                 dt = time.monotonic_ns() - t0
