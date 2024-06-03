@@ -194,6 +194,7 @@ def main():
         "-t",
         "--time",
         type=float,
+        required=True,
         help="Total acquisition time (sec, float)",
     )
     parser.add_argument(
