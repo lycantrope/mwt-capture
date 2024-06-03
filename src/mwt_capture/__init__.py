@@ -282,35 +282,55 @@ def main():
     if framerate > 8:
         print("This camera did not support framerate > 8 (interval <= 0.125)")
         framerate = min(8, framerate)
-
-    try:
-        camera.StreamVideoControl("start_streaming")
-        t0 = time.monotonic_ns()
-        # begin
-        writer.set()
-        dt = 0.0
-        while dt < duration_ns:
-            msg = f"Elapse Time: {dt*1e-9:.3f} (sec)"
-            sys.stdout.write(msg)
-            sys.stdout.flush()
-            tmp = time.monotonic()
-            buf = camera.TakeVideo(framerate)
-            if framerate > 1:
+    if framerate > 3:
+        try:
+            camera.StreamVideoControl("start_streaming")
+            t0 = time.monotonic_ns()
+            # begin
+            writer.set()
+            dt = 0.0
+            while dt < duration_ns:
+                msg = f"Elapse Time: {dt*1e-9:.3f} (sec)"
+                sys.stdout.write(msg)
+                sys.stdout.flush()
+                tmp = time.monotonic()
+                buf = camera.TakeVideo(framerate)
                 for im in buf:
                     queue.put((True, im))
-            else:
+                # idling if the TakeVideo is faster than interval
+                while time.monotonic() - tmp < args.interval:
+                    time.sleep(0.01)
+
+                sys.stdout.write("\033[2K\033[1G")
+                dt = time.monotonic_ns() - t0
+        finally:
+            queue.put((False, None))
+            # camera.RemoveStreamingCallback(callbackid)
+            camera.StreamVideoControl("stop_streaming")
+    else:
+        try:
+            camera.EnableFastFrames(properties)
+            t0 = time.monotonic_ns()
+            # begin
+            writer.set()
+            dt = 0.0
+            while dt < duration_ns:
+                msg = f"Elapse Time: {dt*1e-9:.3f} (sec)"
+                sys.stdout.write(msg)
+                sys.stdout.flush()
+                tmp = time.monotonic()
+                buf = camera.TakeFastFrame()
                 queue.put((True, buf))
+                # idling if the TakeVideo is faster than interval
+                while time.monotonic() - tmp < args.interval:
+                    time.sleep(args.interval / 50.0)
 
-            # idling if the TakeVideo is faster than interval
-            while time.monotonic() - tmp < args.interval:
-                time.sleep(0.01)
-
-            sys.stdout.write("\033[2K\033[1G")
-            dt = time.monotonic_ns() - t0
-    finally:
-        queue.put((False, None))
-        # camera.RemoveStreamingCallback(callbackid)
-        camera.StreamVideoControl("stop_streaming")
+                sys.stdout.write("\033[2K\033[1G")
+                dt = time.monotonic_ns() - t0
+        finally:
+            queue.put((False, None))
+            # camera.RemoveStreamingCallback(callbackid)
+            camera.DisableFastFrames()
 
     writer.join()
     dt = time.monotonic_ns() - t0
