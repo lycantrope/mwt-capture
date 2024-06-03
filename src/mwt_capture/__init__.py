@@ -73,14 +73,15 @@ def idling(second: float):
     t0 = time.monotonic_ns()
     for b in itertools.cycle("|/-\\"):
         dt = time.monotonic_ns() - t0
+        if dt >= second * 1e9:
+
+            break
         msg = f"Start Capture after: {(second - dt/1e9):.2f}s {b}"
         sys.stdout.write(msg)
         sys.stdout.flush()
-        if dt >= second * 1e9:
-            break
         time.sleep(0.05)
         sys.stdout.write("\033[2K\033[1G")
-    print()
+    print("Start Capture after: 0.00s")
 
 
 class PeriodicCapturer:
