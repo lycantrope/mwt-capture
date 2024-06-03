@@ -309,6 +309,7 @@ def main():
             camera.StreamVideoControl("stop_streaming")
     else:
         try:
+            properties.shutterType = API.LUCAM_SHUTTER_TYPE_GLOBAL
             camera.EnableFastFrames(properties)
             t0 = time.monotonic_ns()
             # begin
