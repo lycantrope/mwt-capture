@@ -293,9 +293,18 @@ def main():
             msg = f"Elapse Time: {dt*1e-9:.3f} (sec)"
             sys.stdout.write(msg)
             sys.stdout.flush()
+            tmp = time.monotonic()
             buf = camera.TakeVideo(framerate)
-            for im in buf:
-                queue.put((True, im))
+            if framerate > 1:
+                for im in buf:
+                    queue.put((True, im))
+            else:
+                queue.put((True, buf))
+
+            # idling if the TakeVideo is faster than interval
+            while time.monotonic() - tmp < args.interval:
+                time.sleep(0.01)
+
             sys.stdout.write("\033[2K\033[1G")
             dt = time.monotonic_ns() - t0
     finally:
