@@ -245,7 +245,7 @@ def main():
     properties.exposure = args.exposure
     properties.gain = args.gain
     properties.shutterType = API.LUCAM_SHUTTER_TYPE_ROLLING
-    properties.timeout = args.interval * 2.0
+    properties.timeout = args.interval * 2000.0
     print(properties)
 
     # set camera to 8 bit VGA mode at low framerate
