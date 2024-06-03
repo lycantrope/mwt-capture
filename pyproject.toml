@@ -14,9 +14,7 @@ readme = "README.md"
 requires-python = ">= 3.8"
 
 [project.scripts]
-mwt-capture = "mwt_capture:main"
-mwt-check = "mwt_capture:check_burst"
-mwt-check-framerate = "mwt_capture:check_framerate"
+mwt = "mwt_capture:main"
 
 [build-system]
 requires = ["hatchling"]

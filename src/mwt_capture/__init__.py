@@ -2,6 +2,7 @@ import argparse
 import asyncio
 
 import contextlib
+from dataclasses import dataclass
 from pathlib import Path
 from datetime import datetime
 import sys
@@ -44,7 +45,7 @@ class FileWriter(mp.Process):
             append=True,
         ) as tf_handler:
             while True:
-                ret, im = self.queue.get(True)
+                ret, im = self.queue.get()
                 if not ret:
                     break
                 if im.ndim == 3:
@@ -52,10 +53,10 @@ class FileWriter(mp.Process):
                     im = np.dot(
                         im[..., :3].astype("f8"), [0.2989, 0.5870, 0.1140]
                     ).astype("u1")
-                tf_handler.write(im, datetime=True, compression="LZW")
+                tf_handler.write(im, datetime=True, compression="Deflate")
 
 
-async def wait(second: float):
+async def async_idling(second: float):
     t0 = time.monotonic_ns()
     for b in itertools.cycle("|/-\\"):
         dt = time.monotonic_ns() - t0
@@ -66,6 +67,20 @@ async def wait(second: float):
         sys.stdout.flush()
         await asyncio.sleep(0.05)
         sys.stdout.write("\033[2K\033[1G")
+
+
+def idling(second: float):
+    t0 = time.monotonic_ns()
+    for b in itertools.cycle("|/-\\"):
+        dt = time.monotonic_ns() - t0
+        if dt >= second * 1e9:
+            break
+        msg = f"Start Capture after: {(second - dt/1e9):.2f}s {b}"
+        sys.stdout.write(msg)
+        sys.stdout.flush()
+        time.sleep(0.05)
+        sys.stdout.write("\033[2K\033[1G")
+    print()
 
 
 class PeriodicCapturer:
@@ -119,20 +134,6 @@ def check_folder(path: str):
     return p
 
 
-class MockCamera:
-    def __init__(self, data: Path):
-        self.data = Path(data).glob("*.tif")
-
-    def TakeSnapshot(self, *args, **kwargs):
-        im = None
-        try:
-            im_p = next(self.data)
-            im = tf.imread(im_p)
-        except StopIteration:
-            pass
-        return im
-
-
 class VideoStreaming(mp.Process):
     def __init__(self, camera: Lucam, duration: float):
         super().__init__(daemon=True)
@@ -168,6 +169,17 @@ class VideoStreaming(mp.Process):
             self.camera.StreamVideoControl("stop_streaming")
 
 
+@dataclass(slots=True)
+class Args:
+    interval: float
+    time: float
+    run_after: float
+    outdir: Path
+    suffix: str
+    exposure: float
+    gain: float
+
+
 def main():
     parser = argparse.ArgumentParser("mwt", description="")
     parser.add_argument(
@@ -181,7 +193,6 @@ def main():
         "-t",
         "--time",
         type=float,
-        default=600.0,
         help="Total acquisition time (sec, float)",
     )
     parser.add_argument(
@@ -201,6 +212,7 @@ def main():
     )
 
     parser.add_argument(
+        "-e",
         "--exposure",
         type=float,
         default=50.0,
@@ -208,13 +220,14 @@ def main():
     )
 
     parser.add_argument(
+        "-g",
         "--gain",
         type=float,
         default=0.0,
         help="Camera Gain",
     )
 
-    args = parser.parse_args()
+    args = Args(**vars(parser.parse_args()))
 
     ## init camera
     # camera = MockCamera(r"C:\Users\kuan\Projects\mwt-capture\data")
@@ -248,22 +261,11 @@ def main():
         framerate=1.0 / args.interval,
     )
 
-    # capturer = PeriodicCapturer(
-    #     outdir=args.outdir,
-    #     suffix=args.suffix,
-    #     camera=camera,
-    #     properties=properties,
-    #     interval=args.interval,
-    #     repeat=repeat,
-    # )
-
     # start capture after waiting.
     if args.run_after > 0:
-        time.sleep(args.run_after)
+        idling(args.run_after)
 
     # # start capture
-    # loop.run_until_complete(capturer.start())
-
     filename = datetime.now().strftime(f"%Y%m%d_%H%M%S_{args.suffix}.tif")
 
     queue = mp.Queue(64)
@@ -275,11 +277,6 @@ def main():
 
     duration_ns = args.time * 1e9
     try:
-
-        def streaming_callback(context, data, size):
-            print("Streaming callback function:", context, data[:2], size)
-
-        # callbackid = camera.AddStreamingCallback(streaming_callback)
         camera.StreamVideoControl("start_streaming")
         t0 = time.monotonic_ns()
         # begin
@@ -289,7 +286,9 @@ def main():
             msg = f"Elapse Time: {dt*1e-9:.3f} (sec)"
             sys.stdout.write(msg)
             sys.stdout.flush()
-            buf = camera.TakeVideo(7)  # take 7 frames per second
+            buf = camera.TakeVideo(
+                max(7, round(1.0 / args.interval))
+            )  # take 7 frames per second
             for im in buf:
                 queue.put((True, im))
             sys.stdout.write("\033[2K\033[1G")
