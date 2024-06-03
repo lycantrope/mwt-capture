@@ -73,11 +73,11 @@ def idling(second: float):
     t0 = time.monotonic_ns()
     for b in itertools.cycle("|/-\\"):
         dt = time.monotonic_ns() - t0
-        if dt >= second * 1e9:
-            break
         msg = f"Start Capture after: {(second - dt/1e9):.2f}s {b}"
         sys.stdout.write(msg)
         sys.stdout.flush()
+        if dt >= second * 1e9:
+            break
         time.sleep(0.05)
         sys.stdout.write("\033[2K\033[1G")
     print()
@@ -276,6 +276,11 @@ def main():
     writer.start()
 
     duration_ns = args.time * 1e9
+    framerate = round(1.0 / args.interval)
+    if framerate > 8:
+        print("This camera did not support framerate > 8 (interval <= 0.125)")
+        framerate = min(8, framerate)
+
     try:
         camera.StreamVideoControl("start_streaming")
         t0 = time.monotonic_ns()
@@ -286,9 +291,7 @@ def main():
             msg = f"Elapse Time: {dt*1e-9:.3f} (sec)"
             sys.stdout.write(msg)
             sys.stdout.flush()
-            buf = camera.TakeVideo(
-                max(7, round(1.0 / args.interval))
-            )  # take 7 frames per second
+            buf = camera.TakeVideo(framerate)
             for im in buf:
                 queue.put((True, im))
             sys.stdout.write("\033[2K\033[1G")
