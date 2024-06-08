@@ -42,7 +42,7 @@ class FileWriter(mp.Process):
 
         with tf.TiffWriter(
             self.outputfile,
-            append=True,
+            bigtiff=True,
         ) as tf_handler:
             while True:
                 ret, im = self.queue.get()

@@ -22,9 +22,7 @@ build-backend = "hatchling.build"
 
 [tool.rye]
 managed = true
-dev-dependencies = [
-    "ipython>=8.24.0",
-]
+dev-dependencies = []
 
 [tool.hatch.metadata]
 allow-direct-references = true
