@@ -1,20 +1,20 @@
 import argparse
 import asyncio
-
 import contextlib
-from dataclasses import dataclass
-from pathlib import Path
-from datetime import datetime
-import sys
 import itertools
-import time
-import tifffile as tf
-from tqdm import tqdm
-import numpy as np
 import multiprocessing as mp
+import sys
+import time
+from dataclasses import dataclass
+from datetime import datetime
+from pathlib import Path
 
-from lucam import Lucam, API
+import cv2
+import numpy as np
+import tifffile as tf
+from lucam import API, Lucam
 from lucam.lucam import LucamError
+from tqdm import tqdm
 
 
 @contextlib.contextmanager
@@ -24,6 +24,36 @@ def timer(msg="func"):
         yield
     finally:
         print(f"{msg}|{time.monotonic() - t0:.3f} (sec)")
+
+
+class ImageViewer(mp.Process):
+    def __init__(self, stream: mp.Queue):
+        self.stream = stream
+        self.is_start = mp.Event()
+
+    def set(self):
+        self.is_start.set()
+
+    def is_running(self) -> bool:
+        return self.is_start.is_set()
+
+    def run(self):
+        self.is_start.wait()
+        try:
+            cv2.namedWindow("Preview")
+            while True:
+                ret, im = self.queue.get()
+                if not ret:
+                    break
+                cv2.imshow("Preview", im)
+                ret = cv2.waitKey(125)
+                if ret & 255 in (27, 81, 113):
+                    break
+        finally:
+            cv2.waitKey(1)
+            cv2.destroyAllWindows()
+            cv2.waitKey(1)
+            self.is_start.clear()
 
 
 class FileWriter(mp.Process):
@@ -74,7 +104,6 @@ def idling(second: float):
     for b in itertools.cycle("|/-\\"):
         dt = time.monotonic_ns() - t0
         if dt >= second * 1e9:
-
             break
         msg = f"Start Capture after: {(second - dt/1e9):.2f}s {b}"
         sys.stdout.write(msg)
@@ -184,89 +213,67 @@ class Args:
         return "\n".join(f"{slot},{getattr(self, slot)}" for slot in self.__slots__)
 
 
-def main():
-    parser = argparse.ArgumentParser("mwt", description="")
-    parser.add_argument(
-        "-i",
-        "--interval",
-        type=float,
-        default=0.125,
-        help="Time interval between each snapshot (sec, float)",
-    )
-    parser.add_argument(
-        "-t",
-        "--time",
-        type=float,
-        required=True,
-        help="Total acquisition time (sec, float)",
-    )
-    parser.add_argument(
-        "--run-after",
-        type=float,
-        default=0.0,
-        help="Idling time before acquisition(sec, float)",
-    )
-    parser.add_argument(
-        "outdir",
-        type=check_folder,
-        metavar="OUTDIR",
-        help="The output directory for saving multi-stack tiff",
-    )
-    parser.add_argument(
-        "--suffix", type=str, default="exp", help="filename suffix (default: exp)"
-    )
-
-    parser.add_argument(
-        "-e",
-        "--exposure",
-        type=float,
-        default=50.0,
-        help="exposure time (ms)",
-    )
-
-    parser.add_argument(
-        "-g",
-        "--gain",
-        type=float,
-        default=0.375,
-        help="Camera Gain",
-    )
-
-    args = Args(**vars(parser.parse_args()))
-
+def init_camera(exposure: float, gain: float, *, interval=None):
     ## init camera
-    # camera = MockCamera(r"C:\Users\kuan\Projects\mwt-capture\data")
-    try:
-        camera = Lucam(1)
-    except LucamError as e:
-        print(e)
-        return
-
+    camera = Lucam(1)
     properties = camera.default_snapshot()
     # the parameter width 2592, height 1944, exposure 70.131, gain 0.375 from PC
     # properties.ex
-    properties.exposure = args.exposure
-    properties.gain = args.gain
+    # millisecond
+    properties.exposure = exposure
+    properties.gain = gain
     properties.shutterType = API.LUCAM_SHUTTER_TYPE_ROLLING
-    #  timeout (ms) = interval (sec) * 2000.0
-    properties.timeout = args.interval * 2000.0
-    print(properties)
-
-    # set camera to 8 bit VGA mode at low framerate
-    camera.SetFormat(
-        Lucam.FrameFormat(
-            0,
-            0,
-            2592,
-            1944,
-            API.LUCAM_PF_8,
-            binningX=1,
-            flagsX=1,
-            binningY=1,
-            flagsY=1,
-        ),
-        framerate=1.0 / args.interval,
+    pix_fmt = Lucam.FrameFormat(
+        0,
+        0,
+        2592,
+        1944,
+        API.LUCAM_PF_8,
+        binningX=1,
+        flagsX=1,
+        binningY=1,
+        flagsY=1,
     )
+    if isinstance(interval, float):
+        properties.timeout = max(properties.timeout, (interval * 1e3 + exposure) * 2.0)
+        camera.SetFormat(
+            pix_fmt,
+            framerate=1.0 / interval,
+        )
+    else:
+        camera.SetFormat(pix_fmt)
+
+    return camera, properties
+
+
+@timer("preview")
+def preview(args):
+    camera, _ = init_camera(args.exposure, args.gain)
+    queue = mp.Queue(32)
+    viewer = ImageViewer(queue)
+    viewer.start()
+    print("Start Preview: Ctrl+C or [q] to exit")
+    try:
+        camera.StreamVideoControl("start_streaming")
+        while viewer.is_running():
+            buf = camera.TakeVideo(7)
+            for im in buf:
+                queue.put((True, im))
+    except KeyboardInterrupt:
+        pass
+
+    finally:
+        queue.put((False, None))
+        # camera.RemoveStreamingCallback(callbackid)
+        camera.StreamVideoControl("stop_streaming")
+        print("Stop")
+
+
+def capture(args):
+    args = Args(**vars(args))
+    camera, properties = init_camera(args.exposure, args.gain, interval=args.interval)
+    #  timeout (ms) = interval (sec) * 2000.0
+    print(properties)
 
     # start capture after waiting.
     if args.run_after > 0:
@@ -350,6 +357,98 @@ def main():
     msg = f"Elapse Time: {dt*1e-9:.3f} (sec)"
     print(msg)
     print(f"TIFF file was save at: {outputfile}")
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        prog="mwt",
+        description="A commandline tool for multiple worm imaging",
+    )
+
+    # capture parser
+    cap_parser = parser.add_subparsers(
+        "capture",
+        "cap",
+        title="capture",
+        description="capture images from camera",
+    )
+
+    cap_parser.add_argument(
+        "-i",
+        "--interval",
+        type=float,
+        default=0.125,
+        help="Time interval between each snapshot (sec, float)",
+    )
+    cap_parser.add_argument(
+        "-t",
+        "--time",
+        type=float,
+        required=True,
+        help="Total acquisition time (sec, float)",
+    )
+    cap_parser.add_argument(
+        "--run-after",
+        type=float,
+        default=0.0,
+        help="Idling time before acquisition(sec, float)",
+    )
+    cap_parser.add_argument(
+        "outdir",
+        type=check_folder,
+        metavar="OUTDIR",
+        default=None,
+        help="The output directory for saving multi-stack tiff",
+    )
+    cap_parser.add_argument(
+        "--suffix", type=str, default="exp", help="filename suffix (default: exp)"
+    )
+
+    cap_parser.add_argument(
+        "-e",
+        "--exposure",
+        type=float,
+        default=50.0,
+        help="exposure time (ms)",
+    )
+
+    cap_parser.add_argument(
+        "-g",
+        "--gain",
+        type=float,
+        default=0.375,
+        help="Camera Gain",
+    )
+
+    cap_parser.set_defaults(handler=capture)
+
+    preview_parser = parser.add_subparsers(
+        "preview", "pv", title="preview", description="preview imaging stream"
+    )
+
+    preview_parser.add_argument(
+        "-e",
+        "--exposure",
+        type=float,
+        default=50.0,
+        help="exposure time (ms)",
+    )
+
+    preview_parser.add_argument(
+        "-g",
+        "--gain",
+        type=float,
+        default=0.375,
+        help="Camera Gain",
+    )
+    preview_parser.set_defaults(handler=preview)
+
+    args = parser.parse_args()
+    if not hasattr(args, "handler"):
+        parser.print_help()
+        return
+
+    args.handler(args)
 
 
 def check_burst():

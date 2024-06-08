@@ -2,13 +2,12 @@
 name = "mwt-capture"
 version = "0.1.0"
 description = "Add your description here"
-authors = [
-    { name = "Chung-Kuan Chen", email = "b97b01045@gmail.com" }
-]
+authors = [{ name = "Chung-Kuan Chen", email = "b97b01045@gmail.com" }]
 dependencies = [
     "lucam>=2022.9.27",
     "tifffile[all]>=2024.5.10",
     "tqdm>=4.66.4",
+    "opencv-python>=4.10.0.82",
 ]
 readme = "README.md"
 requires-python = ">= 3.8"
@@ -29,3 +28,6 @@ allow-direct-references = true
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/mwt_capture"]
+
+[tool.ruff.lint]
+extend-select = ["I001"]

@@ -6,13 +6,10 @@
 #   features: []
 #   all-features: false
 #   with-sources: false
-#   generate-hashes: false
 
 -e file:.
 asciitree==0.3.3
     # via zarr
-colorama==0.4.6
-    # via tqdm
 contourpy==1.2.1
     # via matplotlib
 cycler==0.12.1
@@ -43,8 +40,11 @@ numpy==1.26.4
     # via lucam
     # via matplotlib
     # via numcodecs
+    # via opencv-python
     # via tifffile
     # via zarr
+opencv-python==4.10.0.82
+    # via mwt-capture
 packaging==24.0
     # via matplotlib
 pillow==10.3.0
