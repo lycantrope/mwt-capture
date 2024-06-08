@@ -180,6 +180,9 @@ class Args:
     exposure: float
     gain: float
 
+    def to_text(self):
+        return "\n".join(f"{slot},{getattr(self, slot)}" for slot in self.__slots__)
+
 
 def main():
     parser = argparse.ArgumentParser("mwt", description="")
@@ -225,7 +228,7 @@ def main():
         "-g",
         "--gain",
         type=float,
-        default=0.0,
+        default=0.375,
         help="Camera Gain",
     )
 
@@ -245,6 +248,7 @@ def main():
     properties.exposure = args.exposure
     properties.gain = args.gain
     properties.shutterType = API.LUCAM_SHUTTER_TYPE_ROLLING
+    #  timeout (ms) = interval (sec) * 2000.0
     properties.timeout = args.interval * 2000.0
     print(properties)
 
@@ -274,6 +278,13 @@ def main():
     queue = mp.Queue(64)
 
     outputfile = args.outdir.joinpath(filename)
+    param_names = outputfile.stem + "_params.txt"
+
+    with outputfile.with_name(param_names).open("w") as f:
+        print("### CMD INPUT ARGUMENTS", file=f)
+        print(args.to_text(), file=f)
+        print("### CAMERA PROPERTIES", file=f)
+        print(properties, file=f)
 
     writer = FileWriter(outputfile, queue)
     writer.start()
