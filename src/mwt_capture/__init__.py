@@ -28,6 +28,7 @@ def timer(msg="func"):
 
 class ImageViewer(mp.Process):
     def __init__(self, stream: mp.Queue):
+        super().__init__(daemon=True)
         self.stream = stream
         self.is_start = mp.Event()
 
