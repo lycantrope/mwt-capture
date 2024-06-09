@@ -234,14 +234,12 @@ def init_camera(exposure: float, gain: float, *, interval=None):
         binningY=1,
         flagsY=1,
     )
-    if isinstance(interval, float):
-        properties.timeout = max(properties.timeout, (interval * 1e3 + exposure) * 2.0)
-        camera.SetFormat(
-            pix_fmt,
-            framerate=1.0 / interval,
-        )
-    else:
-        camera.SetFormat(pix_fmt)
+    framerate = 1.0 / interval if interval is not None and interval > 0.0 else 8.0
+    properties.timeout = max(properties.timeout, (interval * 1e3 + exposure) * 2.0)
+    camera.SetFormat(
+        pix_fmt,
+        framerate=framerate,
+    )
 
     return camera, properties
 
@@ -366,11 +364,20 @@ def main():
     )
 
     # capture parser
-    subparsers = parser.add_subparsers()
+    subparsers = parser.add_subparsers(title="COMMAND")
+
+    subparsers.add_parser(
+        "help",
+        aliases=["h"],
+        description="help",
+        help="help",
+    ).set_defaults(handler=lambda _: parser.print_help())
+
     cap_parser = subparsers.add_parser(
         "capture",
         aliases=["cap", "c"],
         description="capture images from camera",
+        help="see `capture --help/-h`",
     )
 
     cap_parser.add_argument(
@@ -426,6 +433,7 @@ def main():
         "preview",
         aliases=["pv"],
         description="preview imaging stream",
+        help="see `preview --help/-h`",
     )
 
     preview_parser.add_argument(
