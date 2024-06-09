@@ -42,6 +42,7 @@ class ImageViewer(mp.Process):
         self.is_start.wait()
         try:
             cv2.namedWindow("Preview")
+            cv2.startWindowThread()
             while True:
                 ret, im = self.queue.get()
                 if not ret:
@@ -264,9 +265,6 @@ def preview(args):
                 queue.put((True, im))
             if not viewer.is_running():
                 break
-    except KeyboardInterrupt:
-        pass
-
     finally:
         queue.put((False, None))
         # camera.RemoveStreamingCallback(callbackid)
