@@ -47,6 +47,9 @@ class CameraStreamer(mp.Process):
                 break
             yield im
 
+    def is_empty(self):
+        return self.stream.empty()
+
     def run(self):
         self.is_running.set()
         camera, _ = init_camera(self.exposure, self.gain)
@@ -316,8 +319,9 @@ def init_camera(exposure: float, gain: float, *, interval=None):
 def preview(args):
     streamer = CameraStreamer(args.exposure, args.gain, rotate=args.rotate)
     streamer.start()
-    time.sleep(0.1)
-    print("Start Preview: Ctrl+C or [q] to exit")
+    while streamer.is_empty():
+        time.sleep(0.1)
+    print("Start Preview: Esc or [q/Q] to quit")
     try:
         winname = "Preview"
         cv2.namedWindow(winname, cv2.WINDOW_NORMAL | cv2.WINDOW_FREERATIO)
@@ -332,7 +336,7 @@ def preview(args):
     finally:
         streamer.stop()
         cv2.waitKey(1)
-        cv2.destroyWindow(winname)
+        cv2.destroyAllWindows()
         cv2.waitKey(1)
         streamer.kill()
         print("Stop")
