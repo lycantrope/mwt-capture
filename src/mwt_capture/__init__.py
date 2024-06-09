@@ -254,22 +254,30 @@ def init_camera(exposure: float, gain: float, *, interval=None):
 @timer("preview")
 def preview(args):
     camera, _ = init_camera(args.exposure, args.gain)
-    queue = mp.Queue(32)
-    viewer = ImageViewer(queue)
-    viewer.start()
+    # queue = mp.Queue(32)
+    # viewer = ImageViewer(queue)
+    # viewer.start()
     print("Start Preview: Ctrl+C or [q] to exit")
+
+    cv2.namedWindow("Preview")
+    cv2.startWindowThread()
     try:
         camera.StreamVideoControl("start_streaming")
         while True:
             buf = camera.TakeVideo(7)
             for im in buf:
-                queue.put((True, im))
-
+                cv2.imshow("Preview", im)
+                ret = cv2.waitKey(125)
+                if ret & 255 in (27, 81, 113):
+                    break
     finally:
-        queue.put((False, None))
+        # queue.put((False, None))
         # camera.RemoveStreamingCallback(callbackid)
         camera.StreamVideoControl("stop_streaming")
-        viewer.join()
+        cv2.waitKey(1)
+        cv2.destroyAllWindows()
+        cv2.waitKey(1)
+        # viewer.join()
         print("Stop")
 
 
