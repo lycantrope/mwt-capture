@@ -34,6 +34,7 @@ class CameraStreamer(mp.Process):
         self.stream = mp.Queue(32)
         self.exposure = exposure
         self.gain = gain
+        self.rotate = rotate
         self.is_running = mp.Event()
 
     def stop(self):
