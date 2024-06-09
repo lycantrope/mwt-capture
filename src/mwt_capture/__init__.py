@@ -366,10 +366,10 @@ def main():
     )
 
     # capture parser
-    cap_parser = parser.add_subparsers(
+    subparsers = parser.add_subparsers()
+    cap_parser = subparsers.add_parser(
         "capture",
-        "cap",
-        title="capture",
+        aliases=["cap", "c"],
         description="capture images from camera",
     )
 
@@ -422,8 +422,10 @@ def main():
 
     cap_parser.set_defaults(handler=capture)
 
-    preview_parser = parser.add_subparsers(
-        "preview", "pv", title="preview", description="preview imaging stream"
+    preview_parser = subparsers.add_parser(
+        "preview",
+        aliases=["pv"],
+        description="preview imaging stream",
     )
 
     preview_parser.add_argument(

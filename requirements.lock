@@ -6,10 +6,13 @@
 #   features: []
 #   all-features: false
 #   with-sources: false
+#   generate-hashes: false
 
 -e file:.
 asciitree==0.3.3
     # via zarr
+colorama==0.4.6
+    # via tqdm
 contourpy==1.2.1
     # via matplotlib
 cycler==0.12.1
