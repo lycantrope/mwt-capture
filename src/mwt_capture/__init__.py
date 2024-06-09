@@ -26,6 +26,8 @@ def timer(msg="func"):
         print(f"{msg}|{time.monotonic() - t0:.3f} (sec)")
 
 
+class CameraStream
+
 class ImageViewer(mp.Process):
     def __init__(self, stream: mp.Queue):
         super().__init__(daemon=True)
@@ -259,7 +261,7 @@ def preview(args):
     print("Start Preview: Ctrl+C or [q] to exit")
     try:
         camera.StreamVideoControl("start_streaming")
-        while viewer.is_running():
+        while True:
             buf = camera.TakeVideo(7)
             for im in buf:
                 queue.put((True, im))
@@ -274,7 +276,8 @@ def preview(args):
 
 
 def capture(args):
-    args = Args(**vars(args))
+    args = {k:v for k, v in vars(args) if k in Args.__slots__}
+    args = Args(**args)
     camera, properties = init_camera(args.exposure, args.gain, interval=args.interval)
     #  timeout (ms) = interval (sec) * 2000.0
     print(properties)
