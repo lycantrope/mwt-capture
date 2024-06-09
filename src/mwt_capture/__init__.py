@@ -377,7 +377,7 @@ def main():
         "capture",
         aliases=["cap", "c"],
         description="capture images from camera",
-        help="see `capture --help/-h`",
+        help="see `capture -h, --help`",
     )
 
     cap_parser.add_argument(
@@ -433,7 +433,7 @@ def main():
         "preview",
         aliases=["pv"],
         description="preview imaging stream",
-        help="see `preview --help/-h`",
+        help="see `preview -h, --help`",
     )
 
     preview_parser.add_argument(
