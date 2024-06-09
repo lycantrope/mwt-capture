@@ -331,7 +331,7 @@ def preview(args):
 
 
 def capture(args):
-    args = {k: v for k, v in vars(args) if k in Args.__slots__}
+    args = {k: v for k, v in vars(args).items() if k in Args.__slots__}
     args = Args(**args)
     camera, properties = init_camera(args.exposure, args.gain, interval=args.interval)
     #  timeout (ms) = interval (sec) * 2000.0
