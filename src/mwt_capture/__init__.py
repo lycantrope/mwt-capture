@@ -39,7 +39,8 @@ class ImageViewer(mp.Process):
         return self.is_start.is_set()
 
     def run(self):
-        self.is_start.wait()
+        while not self.is_start.is_set():
+            time.sleep(0.1)
         try:
             cv2.namedWindow("Preview")
             cv2.startWindowThread()
@@ -263,12 +264,12 @@ def preview(args):
             buf = camera.TakeVideo(7)
             for im in buf:
                 queue.put((True, im))
-            if not viewer.is_running():
-                break
+
     finally:
         queue.put((False, None))
         # camera.RemoveStreamingCallback(callbackid)
         camera.StreamVideoControl("stop_streaming")
+        viewer.join()
         print("Stop")
 
 
