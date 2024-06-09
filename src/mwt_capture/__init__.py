@@ -27,7 +27,9 @@ def timer(msg="func"):
 
 
 class CameraStreamer(mp.Process):
-    def __init__(self, exposure: float = 50.0, gain: float = 0.275):
+    def __init__(
+        self, exposure: float = 50.0, gain: float = 0.275, rotate: bool = False
+    ):
         super().__init__(daemon=True)
         self.stream = mp.Queue(32)
         self.exposure = exposure
@@ -52,6 +54,8 @@ class CameraStreamer(mp.Process):
             while self.is_running.is_set():
                 buf = camera.TakeVideo(7)
                 for im in buf:
+                    if self.rotate:
+                        im = cv2.rotate(im, cv2.ROTATE_90_COUNTERCLOCKWISE)
                     self.stream.put((True, im))
         finally:
             self.stream.put((False, None))
@@ -309,7 +313,7 @@ def init_camera(exposure: float, gain: float, *, interval=None):
 
 @timer("preview")
 def preview(args):
-    streamer = CameraStreamer(args.exposure, args.gain)
+    streamer = CameraStreamer(args.exposure, args.gain, rotate=args.rotate)
     streamer.start()
     time.sleep(0.1)
     print("Start Preview: Ctrl+C or [q] to exit")
@@ -514,6 +518,13 @@ def main():
         type=float,
         default=0.375,
         help="Camera Gain",
+    )
+
+    preview_parser.add_argument(
+        "-r",
+        "--rotate",
+        action="store_true",
+        help="Image was rotated counterclockwise 90 degree",
     )
     preview_parser.set_defaults(handler=preview)
 
