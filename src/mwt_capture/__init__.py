@@ -53,10 +53,10 @@ class CameraStreamer(mp.Process):
         try:
             camera.StreamVideoControl("start_streaming")
             while self.is_running.is_set():
-                buf = camera.TakeVideo(7)
+                buf = camera.TakeVideo(8)
                 for im in buf:
                     if self.rotate:
-                        im = cv2.rotate(im, cv2.ROTATE_90_COUNTERCLOCKWISE)
+                        im = cv2.rotate(im, cv2.ROTATE_90_CLOCKWISE)
                     self.stream.put((True, im))
         finally:
             self.stream.put((False, None))
@@ -319,17 +319,20 @@ def preview(args):
     time.sleep(0.1)
     print("Start Preview: Ctrl+C or [q] to exit")
     try:
-        cv2.namedWindow("Preview", cv2.WINDOW_NORMAL | cv2.WINDOW_FREERATIO)
+        winname = "Preview"
+        cv2.namedWindow(winname, cv2.WINDOW_NORMAL | cv2.WINDOW_FREERATIO)
         cv2.startWindowThread()
-        for im in streamer.get_stream():
-            cv2.imshow("Preview", im)
-            ret = cv2.waitKey(125)
-            if ret & 255 in (27, 81, 113):
-                break
+        stream = streamer.get_stream()
+        counter = itertools.count()
+        q_key = (27, 81, 113)
+        while cv2.getWindowProperty(winname, 0) >= 0 and cv2.waitKey(5) not in q_key:
+            if next(counter) % 25 == 0:
+                im = next(stream)
+                cv2.imshow(winname, im)
     finally:
         streamer.stop()
         cv2.waitKey(1)
-        cv2.destroyAllWindows()
+        cv2.destroyWindow(winname)
         cv2.waitKey(1)
         streamer.kill()
         print("Stop")
