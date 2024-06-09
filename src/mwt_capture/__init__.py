@@ -333,6 +333,8 @@ def preview(args):
             if next(counter) % 25 == 0:
                 im = next(stream)
                 cv2.imshow(winname, im)
+    except cv2.error:
+        pass
     finally:
         streamer.stop()
         cv2.waitKey(1)
