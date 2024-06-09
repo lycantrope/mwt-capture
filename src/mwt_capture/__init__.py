@@ -326,12 +326,21 @@ def preview(args):
         winname = "Preview"
         cv2.namedWindow(winname, cv2.WINDOW_NORMAL | cv2.WINDOW_FREERATIO)
         cv2.startWindowThread()
-        stream = streamer.get_stream()
-        counter = itertools.count()
+        # quit key
         q_key = (27, 81, 113)
+
+        # get iterator from stream
+        stream_iter = streamer.get_stream()
+        # take first image and resize the window as aspect
+        im = next(stream_iter)
+        height, width = im.shape[:2]
+        cv2.imshow(winname, im)
+        cv2.resizeWindow(winname, width, height)
+
+        counter = itertools.count(1)
         while cv2.getWindowProperty(winname, 0) >= 0 and cv2.waitKey(5) not in q_key:
             if next(counter) % 25 == 0:
-                im = next(stream)
+                im = next(stream_iter)
                 cv2.imshow(winname, im)
     except cv2.error:
         pass
