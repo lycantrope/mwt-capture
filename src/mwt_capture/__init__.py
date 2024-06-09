@@ -258,10 +258,12 @@ def preview(args):
     print("Start Preview: Ctrl+C or [q] to exit")
     try:
         camera.StreamVideoControl("start_streaming")
-        while viewer.is_running():
+        while True:
             buf = camera.TakeVideo(7)
             for im in buf:
                 queue.put((True, im))
+            if not viewer.is_running():
+                break
     except KeyboardInterrupt:
         pass
 
