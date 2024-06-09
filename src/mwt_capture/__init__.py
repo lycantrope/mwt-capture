@@ -438,24 +438,17 @@ def capture(args):
 def main():
     parser = argparse.ArgumentParser(
         prog="mwt",
-        description="A commandline tool for multiple worm imaging",
+        description="A command line tool for multiple worm imaging",
     )
 
     # capture parser
     subparsers = parser.add_subparsers(title="COMMAND")
 
-    subparsers.add_parser(
-        "help",
-        aliases=["h"],
-        description="help",
-        help="help",
-    ).set_defaults(handler=lambda _: parser.print_help())
-
     cap_parser = subparsers.add_parser(
         "capture",
         aliases=["cap", "c"],
         description="capture images from camera",
-        help="see `capture -h, --help`",
+        help="see `mwt capture -h, --help`",
     )
 
     cap_parser.add_argument(
@@ -511,7 +504,7 @@ def main():
         "preview",
         aliases=["pv"],
         description="preview imaging stream",
-        help="see `preview -h, --help`",
+        help="see `mwt preview -h, --help`",
     )
 
     preview_parser.add_argument(
@@ -537,6 +530,13 @@ def main():
         help="Image was rotated counterclockwise 90 degree",
     )
     preview_parser.set_defaults(handler=preview)
+
+    subparsers.add_parser(
+        "help",
+        aliases=["h"],
+        description="help",
+        help="show this help message and exit",
+    ).set_defaults(handler=lambda _: parser.print_help())
 
     args = parser.parse_args()
     if not hasattr(args, "handler"):
