@@ -26,7 +26,39 @@ def timer(msg="func"):
         print(f"{msg}|{time.monotonic() - t0:.3f} (sec)")
 
 
-class CameraStream
+class CameraStreamer(mp.Process):
+    def __init__(self, exposure: float = 50.0, gain: float = 0.275):
+        super().__init__(daemon=True)
+        self.stream = mp.Queue(32)
+        self.exposure = exposure
+        self.gain = gain
+        self.is_running = mp.Event()
+
+    def stop(self):
+        self.is_running.clear()
+
+    def get_stream(self):
+        while True:
+            ret, im = self.stream.get()
+            if not ret:
+                break
+            yield im
+
+    def run(self):
+        self.is_running.set()
+        camera, _ = init_camera(self.exposure, self.gain)
+        try:
+            camera.StreamVideoControl("start_streaming")
+            while self.is_running.is_set():
+                buf = camera.TakeVideo(7)
+                for im in buf:
+                    self.stream.put((True, im))
+        finally:
+            self.stream.put((False, None))
+            # camera.RemoveStreamingCallback(callbackid)
+            camera.StreamVideoControl("stop_streaming")
+            print("Stop")
+
 
 class ImageViewer(mp.Process):
     def __init__(self, stream: mp.Queue):
@@ -252,31 +284,54 @@ def init_camera(exposure: float, gain: float, *, interval=None):
     return camera, properties
 
 
+# @timer("preview")
+# def preview(args):
+#     camera, _ = init_camera(args.exposure, args.gain)
+#     queue = mp.Queue(32)
+#     viewer = ImageViewer(queue)
+#     viewer.start()
+#     print("Start Preview: Ctrl+C or [q] to exit")
+#     try:
+#         camera.StreamVideoControl("start_streaming")
+#         while True:
+#             buf = camera.TakeVideo(7)
+#             for im in buf:
+#                 queue.put((True, im))
+#     except KeyboardInterrupt:
+#         pass
+
+#     finally:
+#         queue.put((False, None))
+#         # camera.RemoveStreamingCallback(callbackid)
+#         camera.StreamVideoControl("stop_streaming")
+#         print("Stop")
+
+
 @timer("preview")
 def preview(args):
-    camera, _ = init_camera(args.exposure, args.gain)
-    queue = mp.Queue(32)
-    viewer = ImageViewer(queue)
-    viewer.start()
+    streamer = CameraStreamer(args.exposure, args.gain)
+    streamer.start()
+    time.sleep(0.1)
     print("Start Preview: Ctrl+C or [q] to exit")
     try:
-        camera.StreamVideoControl("start_streaming")
-        while True:
-            buf = camera.TakeVideo(7)
-            for im in buf:
-                queue.put((True, im))
-    except KeyboardInterrupt:
-        pass
-
+        cv2.namedWindow("Preview", cv2.WINDOW_NORMAL | cv2.WINDOW_FREERATIO)
+        cv2.startWindowThread()
+        for im in streamer.get_stream():
+            cv2.imshow("Preview", im)
+            ret = cv2.waitKey(125)
+            if ret & 255 in (27, 81, 113):
+                break
     finally:
-        queue.put((False, None))
-        # camera.RemoveStreamingCallback(callbackid)
-        camera.StreamVideoControl("stop_streaming")
+        streamer.stop()
+        cv2.waitKey(1)
+        cv2.destroyAllWindows()
+        cv2.waitKey(1)
+        streamer.kill()
         print("Stop")
 
 
 def capture(args):
-    args = {k:v for k, v in vars(args) if k in Args.__slots__}
+    args = {k: v for k, v in vars(args) if k in Args.__slots__}
     args = Args(**args)
     camera, properties = init_camera(args.exposure, args.gain, interval=args.interval)
     #  timeout (ms) = interval (sec) * 2000.0
