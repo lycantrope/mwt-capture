@@ -235,6 +235,7 @@ def init_camera(exposure: float, gain: float, *, interval=None):
         flagsY=1,
     )
     properties.timeout = max(properties.timeout, exposure * 2.0)
+    framerate = 8.0
     if interval is not None and interval > 0.0:
         framerate = 1.0 / interval if interval is not None and interval > 0.0 else 8.0
         properties.timeout = max(properties.timeout, (interval * 1e3 + exposure) * 2.0)
