@@ -39,13 +39,12 @@ class ImageViewer(mp.Process):
         return self.is_start.is_set()
 
     def run(self):
-        while not self.is_start.is_set():
-            time.sleep(0.1)
+        self.is_start.wait()
         try:
-            cv2.namedWindow("Preview")
+            cv2.namedWindow("Preview", cv2.WINDOW_NORMAL | cv2.WINDOW_FREERATIO)
             cv2.startWindowThread()
             while True:
-                ret, im = self.queue.get()
+                ret, im = self.stream.get()
                 if not ret:
                     break
                 cv2.imshow("Preview", im)
@@ -254,30 +253,23 @@ def init_camera(exposure: float, gain: float, *, interval=None):
 @timer("preview")
 def preview(args):
     camera, _ = init_camera(args.exposure, args.gain)
-    # queue = mp.Queue(32)
-    # viewer = ImageViewer(queue)
-    # viewer.start()
+    queue = mp.Queue(32)
+    viewer = ImageViewer(queue)
+    viewer.start()
     print("Start Preview: Ctrl+C or [q] to exit")
-
-    cv2.namedWindow("Preview")
-    cv2.startWindowThread()
     try:
         camera.StreamVideoControl("start_streaming")
-        while True:
+        while viewer.is_running():
             buf = camera.TakeVideo(7)
             for im in buf:
-                cv2.imshow("Preview", im)
-                ret = cv2.waitKey(125)
-                if ret & 255 in (27, 81, 113):
-                    break
+                queue.put((True, im))
+    except KeyboardInterrupt:
+        pass
+
     finally:
-        # queue.put((False, None))
+        queue.put((False, None))
         # camera.RemoveStreamingCallback(callbackid)
         camera.StreamVideoControl("stop_streaming")
-        cv2.waitKey(1)
-        cv2.destroyAllWindows()
-        cv2.waitKey(1)
-        # viewer.join()
         print("Stop")
 
 
