@@ -56,6 +56,8 @@ pyparsing==3.1.2
     # via matplotlib
 python-dateutil==2.9.0.post0
     # via matplotlib
+pywin32==306
+    # via mwt-capture
 six==1.16.0
     # via python-dateutil
 tifffile==2024.5.10

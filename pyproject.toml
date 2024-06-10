@@ -8,6 +8,7 @@ dependencies = [
     "tifffile[all]>=2024.5.10",
     "tqdm>=4.66.4",
     "opencv-python>=4.10.0.82",
+    "pywin32>=306",
 ]
 readme = "README.md"
 requires-python = ">= 3.8"

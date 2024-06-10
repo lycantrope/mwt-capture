@@ -15,6 +15,7 @@ import tifffile as tf
 from lucam import API, Lucam
 from lucam.lucam import LucamError
 from tqdm import tqdm
+import win32gui
 
 
 @contextlib.contextmanager
@@ -315,42 +316,39 @@ def init_camera(exposure: float, gain: float, *, interval=None):
 #         print("Stop")
 
 
-@timer("preview")
 def preview(args):
-    streamer = CameraStreamer(args.exposure, args.gain, rotate=args.rotate)
-    streamer.start()
-    while streamer.is_empty():
-        time.sleep(0.1)
-    print("Start Preview: Esc or [q/Q] to quit")
+    camera, properties = init_camera(args.exposure, args.gain)
+
     try:
-        winname = "Preview"
-        cv2.namedWindow(winname, cv2.WINDOW_NORMAL | cv2.WINDOW_FREERATIO)
-        cv2.startWindowThread()
-        # quit key
-        q_key = (27, 81, 113)
+        winname = b"Preview"
+        camera.CreateDisplayWindow(winname, width=2572 // 4, height=1964 // 4)
+        camera.StreamVideoControl("start_display")
+        windows = []
 
-        # get iterator from stream
-        stream_iter = streamer.get_stream()
-        # take first image and resize the window as aspect
-        im = next(stream_iter)
-        height, width = im.shape[:2]
-        cv2.imshow(winname, im)
-        cv2.resizeWindow(winname, width, height)
+        def callback(hwnd, custom_list):
+            custom_list.append((hwnd, win32gui.GetWindowText(hwnd)))
 
-        counter = itertools.count(1)
-        while cv2.getWindowProperty(winname, 0) >= 0 and cv2.waitKey(5) not in q_key:
-            if next(counter) % 25 == 0:
-                im = next(stream_iter)
-                cv2.imshow(winname, im)
-    except cv2.error:
+        win32gui.EnumWindows(callback, windows)
+
+        hwnd = max(hwnd for hwnd, name in windows if name == winname.decode())
+        while True:
+            # camera.AdjustDisplayWindow(x=0, y=0, width=2592//4, height=1964//4)
+            msg = f"fps: {camera.QueryDisplayFrameRate():.2f}"
+            sys.stdout.write(msg)
+            sys.stdout.flush()
+            if cv2.waitKey(20) in (27, 81, 113):
+                break
+            if win32gui.IsWindow(hwnd):
+                x1, y1, x2, y2 = win32gui.GetWindowRect(hwnd)
+                camera.AdjustDisplayWindow(x=0, y=0, width=x2 - x1, height=y2 - y1)
+            else:
+                break
+            sys.stdout.write("\033[2K\033[1G")
+    except KeyboardInterrupt:
         pass
     finally:
-        streamer.stop()
-        cv2.waitKey(1)
-        cv2.destroyAllWindows()
-        cv2.waitKey(1)
-        streamer.kill()
-        print("Stop")
+        camera.StreamVideoControl("stop_streaming")
+        camera.DestroyDisplayWindow()
 
 
 def capture(args):
