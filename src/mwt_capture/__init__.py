@@ -37,7 +37,7 @@ class FileWriter(mp.Process):
                     dtype
                 )
 
-            def generator():
+            def generator(im):
                 yield im
                 while True:
                     im = self.pipe.recv()
@@ -51,7 +51,7 @@ class FileWriter(mp.Process):
 
             tf.imwrite(
                 self.outputfile,
-                generator(),
+                generator(im),
                 imagej=True,
                 dtype=dtype,
                 shape=(self.nframe, height, width),
