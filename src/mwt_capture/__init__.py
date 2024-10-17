@@ -223,7 +223,7 @@ def capture(args):
             sys.stdout.flush()
             tmp = time.monotonic()
             buf = camera.TakeFastFrame()
-            sender.put(buf)
+            sender.send(buf)
             # idling if the TakeVideo is faster than interval
             while time.monotonic() - tmp < args.interval:
                 time.sleep(0.005)
@@ -231,7 +231,7 @@ def capture(args):
             sys.stdout.write("\033[2K\033[1G")
             dt = time.monotonic_ns() - t0
     finally:
-        sender.put(None)
+        sender.send(None)
         # camera.RemoveStreamingCallback(callbackid)
         writer.join()
         sender.close()
