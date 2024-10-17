@@ -316,7 +316,7 @@ def convert_lvi_to_tiff(src: Path, outputdir: Path):
         dtype = im.dtype
         shape = (int(T), H, W)
         for i in range(1000):
-            dst = outputdir.joinpath(src.stem + f"_{i:0>3d}.tiff")
+            dst = outputdir.joinpath(src.stem + f"_{i:0>3d}.tif")
             if not dst.exists():
                 break
 
