@@ -1,15 +1,18 @@
 import argparse
 import itertools
 import multiprocessing as mp
+import os
 import sys
 import time
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
+import cv2
 import numpy as np
 import tifffile as tf
 from lucam import API, Lucam
+from tqdm import tqdm
 import win32gui
 import win32api
 import win32con
@@ -38,16 +41,24 @@ class FileWriter(mp.Process):
                 )
 
             def generator(im):
-                yield im
-                while True:
-                    im = self.pipe.recv()
-                    if im is None:
-                        return
-                    if im.ndim == 3:
-                        im = np.dot(
+                if im.ndim == 2:
+                    yield np.dot(
+                        im[..., :3].astype("f8"), (0.2989, 0.5870, 0.1140)
+                    ).astype(dtype)
+                    while True:
+                        im = self.pipe.recv()
+                        if im is None:
+                            return
+                        yield np.dot(
                             im[..., :3].astype("f8"), (0.2989, 0.5870, 0.1140)
                         ).astype(dtype)
+                else:
                     yield im
+                    while True:
+                        im = self.pipe.recv()
+                        if im is None:
+                            return
+                        yield im
 
             tf.imwrite(
                 self.outputfile,
@@ -81,6 +92,13 @@ def check_folder(path: str):
         p.mkdir(exist_ok=True)
     except FileExistsError:
         raise NotADirectoryError(f"{p}")
+    return p
+
+
+def check_file(path: str):
+    p = Path(path)
+    if not p.is_file():
+        raise IOError(f"{path}: is not a file.")
     return p
 
 
@@ -243,6 +261,81 @@ def capture(args):
     print(f"TIFF file was save at: {outputfile}")
 
 
+def convert_all_videos(args):
+    for src in map(Path, args.video):
+        if not src.is_file():
+            print(f"{src}: is not a file")
+            continue
+        outputdir = src.parent
+        if args.output is not None:
+            outputdir = Path(args.output)
+
+        outputdir.mkdir(exist_ok=True)
+        convert_lvi_to_tiff(src, outputdir)
+
+
+def convert_lvi_to_tiff(src: Path, outputdir: Path):
+
+    try:
+        cap = cv2.VideoCapture(os.fspath(src))
+        if cap is None or not cap.isOpened():
+            print(f"OpenCV cannot open {src}.")
+            return
+
+        FPS = cap.get(cv2.CAP_PROP_FPS)
+        T = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        pbar = tqdm(total=T, desc=f"{src.name}")
+        # Retrieve first frame
+        ret = cap.grab()
+        if not ret:
+            return
+        _, im = cap.retrieve()
+
+        def generator(im):
+            if im.ndim == 3:
+                yield cv2.cvtColor(im, cv2.COLOR_BGR2GRAY)
+                pbar.update(1)
+                ret = cap.grab()
+                while ret:
+                    _, im = cap.retrieve()
+                    yield cv2.cvtColor(im, cv2.COLOR_BGR2GRAY)
+                    pbar.update(1)
+                    ret = cap.grab()
+            else:
+                yield im
+                pbar.update(1)
+                ret = cap.grab()
+                while ret:
+                    _, im = cap.retrieve()
+                    yield im
+                    pbar.update(1)
+                    ret = cap.grab()
+            pbar.close()
+
+        H, W = im.shape[:2]
+        dtype = im.dtype
+        shape = (int(T), H, W)
+        for i in range(1000):
+            dst = outputdir.joinpath(src.stem + f"_{i:0>3d}.tiff")
+            if not dst.exists():
+                break
+
+        tf.imwrite(
+            dst,
+            generator(im),
+            imagej=True,
+            metadata={
+                "axes": "TYX",
+                "fps": FPS,
+            },
+            shape=shape,
+            dtype=dtype,
+        )
+    finally:
+        if cap is not None:
+            cap.release()
+
+
 def main():
     parser = argparse.ArgumentParser(
         prog="mwt",
@@ -339,6 +432,17 @@ def main():
         help="Image was rotated counterclockwise 90 degree",
     )
     preview_parser.set_defaults(handler=preview)
+
+    convert_parser = subparsers.add_parser(
+        "convert",
+        description="Convert video to ImageJ tiff",
+        help="see `mwt convert -h, --help`",
+    )
+
+    convert_parser.add_argument("video", nargs="+")
+    convert_parser.add_argument("--output", "-o", default=None)
+
+    convert_parser.set_defaults(handler=convert_all_videos)
 
     subparsers.add_parser(
         "help",
