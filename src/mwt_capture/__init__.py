@@ -275,7 +275,6 @@ def convert_all_videos(args):
 
 
 def convert_lvi_to_tiff(src: Path, outputdir: Path):
-
     try:
         cap = cv2.VideoCapture(os.fspath(src))
         if cap is None or not cap.isOpened():
@@ -291,34 +290,29 @@ def convert_lvi_to_tiff(src: Path, outputdir: Path):
             return
         _, im = cap.retrieve()
 
-        def generator(im):
-            if im.ndim == 3:
-                yield cv2.cvtColor(im, cv2.COLOR_BGR2GRAY)
-                pbar.update(1)
-                ret = cap.grab()
-                while ret:
-                    _, im = cap.retrieve()
-                    yield cv2.cvtColor(im, cv2.COLOR_BGR2GRAY)
-                    pbar.update(1)
-                    ret = cap.grab()
-            else:
-                yield im
-                pbar.update(1)
-                ret = cap.grab()
-                while ret:
-                    _, im = cap.retrieve()
-                    yield im
-                    pbar.update(1)
-                    ret = cap.grab()
-            pbar.close()
-
         H, W = im.shape[:2]
         dtype = im.dtype
         shape = (int(T), H, W)
-        for i in range(1000):
-            dst = outputdir.joinpath(src.stem + f"_{i:0>3d}.tiff")
-            if not dst.exists():
-                break
+
+        def generator(im):
+            if im.ndim == 3:
+                _transform = lambda im: cv2.cvtColor(im, cv2.COLOR_BGR2GRAY).astype(
+                    im.dtype
+                )
+            else:
+                _transform = lambda im: im
+
+            yield _transform(im)
+            pbar.update(1)
+            ret = cap.grab()
+            while ret:
+                _, im = cap.retrieve()
+                yield _transform(im)
+                pbar.update(1)
+                ret = cap.grab()
+            pbar.close()
+
+        dst = get_valid_filename(src, outputdir)
 
         tf.imwrite(
             dst,
@@ -334,6 +328,15 @@ def convert_lvi_to_tiff(src: Path, outputdir: Path):
     finally:
         if cap is not None:
             cap.release()
+
+
+def get_valid_filename(src, outputdir):
+    for i in range(1000):
+        dst = outputdir.joinpath(src.stem + f"_{i:0>3d}.tiff")
+        if not dst.exists():
+            return dst
+    # if 999 is not enough, the file name will recursive generate with _999_000
+    return get_valid_filename(dst, outputdir)
 
 
 def main():
