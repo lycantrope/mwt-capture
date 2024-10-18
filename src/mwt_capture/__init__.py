@@ -332,7 +332,7 @@ def convert_lvi_to_tiff(src: Path, outputdir: Path):
 
 def get_valid_filename(src, outputdir):
     for i in range(1000):
-        dst = outputdir.joinpath(src.stem + f"_{i:0>3d}.tiff")
+        dst = outputdir.joinpath(src.stem + f"_{i:0>3d}.tif")
         if not dst.exists():
             return dst
     # if 999 is not enough, the file name will recursive generate with _999_000
