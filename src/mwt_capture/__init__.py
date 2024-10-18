@@ -296,9 +296,9 @@ def convert_lvi_to_tiff(src: Path, outputdir: Path):
 
         def generator(im):
             if im.ndim == 3:
-                _transform = lambda im: cv2.cvtColor(im, cv2.COLOR_BGR2GRAY).astype(
-                    im.dtype
-                )
+                _transform = lambda x: np.dot(
+                            x[..., :3].astype("f8"), (0.2989, 0.5870, 0.1140),
+                        ).astype(dtype)
             else:
                 _transform = lambda im: im
 
