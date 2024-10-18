@@ -35,30 +35,23 @@ class FileWriter(mp.Process):
 
             dtype = im.dtype
             height, width = im.shape[:2]
-            if im.ndim == 3:
-                im = np.dot(im[..., :3].astype("f8"), (0.2989, 0.5870, 0.1140)).astype(
-                    dtype
-                )
 
             def generator(im):
-                if im.ndim == 2:
-                    yield np.dot(
+                if im.ndim == 3:
+                    _transform = lambda im: np.dot(
                         im[..., :3].astype("f8"), (0.2989, 0.5870, 0.1140)
                     ).astype(dtype)
-                    while True:
-                        im = self.pipe.recv()
-                        if im is None:
-                            return
-                        yield np.dot(
-                            im[..., :3].astype("f8"), (0.2989, 0.5870, 0.1140)
-                        ).astype(dtype)
                 else:
-                    yield im
-                    while True:
-                        im = self.pipe.recv()
-                        if im is None:
-                            return
-                        yield im
+                    _transform = lambda im: im
+                    
+                yield _transform(im)
+                
+                while True:
+                    im = self.pipe.recv()
+                    if im is None:
+                        return
+                    yield _transform(im)
+              
 
             tf.imwrite(
                 self.outputfile,
@@ -296,9 +289,9 @@ def convert_lvi_to_tiff(src: Path, outputdir: Path):
 
         def generator(im):
             if im.ndim == 3:
-                _transform = lambda x: np.dot(
-                            x[..., :3].astype("f8"), (0.2989, 0.5870, 0.1140),
-                        ).astype(dtype)
+                _transform = lambda im: cv2.cvtColor(im, cv2.COLOR_BGR2GRAY).astype(
+                    im.dtype
+                )
             else:
                 _transform = lambda im: im
 
