@@ -29,7 +29,7 @@ def idling(second: float):
         msg = f"Start Capture after: {(second - dt/1e9):.2f}s {b}"
         sys.stdout.write(msg)
         sys.stdout.flush()
-        time.sleep(0.05)
+        cv2.waitKey(50)
         sys.stdout.write("\033[2K\033[1G")
     print("Start Capture after: 0.00s")
 
@@ -138,6 +138,7 @@ def preview(args):
                 camera.AdjustDisplayWindow(x=0, y=0, width=x2 - x1, height=y2 - y1)
             else:
                 break
+            cv2.waitKey(8)
             sys.stdout.write("\033[2K\033[1G")
     except KeyboardInterrupt:
         pass
@@ -197,7 +198,7 @@ def capture(args):
             outputfile.flush()
             # idling if the TakeVideo is faster than interval
             while time.monotonic() - tmp + 0.005 < args.interval:
-                time.sleep(0.005)
+                cv2.waitKey(5)
             sys.stdout.write("\033[2K\033[1G")
             dt = time.monotonic_ns() - t0
     finally:
