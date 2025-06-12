@@ -53,7 +53,7 @@ def check_file(path: str):
 @dataclass(slots=True)
 class Args:
     interval: float
-    nframe: float
+    nframe: int
     run_after: float
     outdir: Path
     suffix: str
@@ -341,7 +341,7 @@ def main():
         "-e",
         "--exposure",
         type=float,
-        default=125.0,
+        default=100.0,
         help="exposure time (ms)",
     )
 
