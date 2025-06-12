@@ -4,11 +4,12 @@ version = "0.1.0"
 description = "Add your description here"
 authors = [{ name = "Chung-Kuan Chen", email = "b97b01045@gmail.com" }]
 dependencies = [
-    "lucam>=2022.9.27",
-    "tifffile[all]>=2024.5.10",
-    "tqdm>=4.66.4",
-    "opencv-python>=4.10.0.82",
-    "pywin32>=306",
+    "lucam",
+    "tifffile[all]",
+    "tqdm",
+    "opencv-python",
+    "pywin32",
+    "h5py",
 ]
 readme = "README.md"
 requires-python = ">= 3.8"
@@ -20,9 +21,9 @@ mwt = "mwt_capture:main"
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
-[tool.rye]
+[tool.uv]
 managed = true
-dev-dependencies = []
+dev-dependencies = ["ipykernel", "ipython"]
 
 [tool.hatch.metadata]
 allow-direct-references = true

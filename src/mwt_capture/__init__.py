@@ -9,60 +9,15 @@ from datetime import datetime
 from pathlib import Path
 
 import cv2
-import numpy as np
 import tifffile as tf
-from lucam import API, Lucam
-from tqdm import tqdm
-import win32gui
 import win32api
 import win32con
+import win32gui
+from lucam import API, Lucam
+from tqdm import tqdm
 
-
-class FileWriter(mp.Process):
-    def __init__(self, outputfile: Path, nframe: int, interval: float, pipe):
-        super().__init__(daemon=True)
-        self.outputfile = outputfile
-        self.nframe = nframe
-        self.interval = interval
-        self.pipe = pipe
-
-    def run(self):
-        try:
-            # get first image to obtain image shape and dtype
-            im = self.pipe.recv()
-            if im is None:
-                return
-
-            dtype = im.dtype
-            height, width = im.shape[:2]
-
-            def generator(im):
-                if im.ndim == 3:
-                    _transform = lambda im: np.dot(
-                        im[..., :3].astype("f8"), (0.2989, 0.5870, 0.1140)
-                    ).astype(dtype)
-                else:
-                    _transform = lambda im: im
-                    
-                yield _transform(im)
-                
-                while True:
-                    im = self.pipe.recv()
-                    if im is None:
-                        return
-                    yield _transform(im)
-              
-
-            tf.imwrite(
-                self.outputfile,
-                generator(im),
-                imagej=True,
-                dtype=dtype,
-                shape=(self.nframe, height, width),
-                metadata={"axes": "TYX", "fps": 1.0 / self.interval},
-            )
-        except EOFError:  # Catch EOFError if the connection was closed.
-            ...
+IM_WIDTH = 2592
+IM_HEIGHT = 1944
 
 
 def idling(second: float):
@@ -122,8 +77,8 @@ def init_camera(exposure: float, gain: float, *, interval=None):
     pix_fmt = Lucam.FrameFormat(
         0,
         0,
-        2592,
-        1944,
+        IM_WIDTH,
+        IM_HEIGHT,
         API.LUCAM_PF_8,
         binningX=1,
         flagsX=1,
@@ -214,9 +169,14 @@ def capture(args):
         print("### CAMERA PROPERTIES", file=f)
         print(properties, file=f)
 
-    receiver, sender = mp.Pipe()
-    writer = FileWriter(outputfile, args.nframe, args.interval, receiver)
-    writer.start()
+    # Create memmap to hold data.
+    outputfile = tf.memmap(
+        outputfile,
+        shape=(args.nframe, IM_HEIGHT, IM_WIDTH),
+        imagej=True,
+        dtype="u1",
+        metadata={"axes": "TYX", "fps": 1.0 / args.interval},
+    )
 
     if args.interval < 0.35:
         print("This scripts did not support interval < 0.35 sec)")
@@ -228,24 +188,22 @@ def capture(args):
         t0 = time.monotonic_ns()
         # begin
         dt = 0.0
-        for _ in range(args.nframe):
-            msg = f"Elapse Time: {dt*1e-9:.3f} (sec)"
+        for i in range(args.nframe):
+            msg = f"Elapse Time: {dt*1e-9:.3f} (sec); Frame: {i+1:d}/{args.nframe:d}"
             sys.stdout.write(msg)
             sys.stdout.flush()
             tmp = time.monotonic()
             buf = camera.TakeFastFrame()
-            sender.send(buf)
+            buf = _transform(buf)
+            outputfile[i, :, :] = buf
+            outputfile.flush()
             # idling if the TakeVideo is faster than interval
-            while time.monotonic() - tmp < args.interval:
+            while time.monotonic() - tmp + 0.005 < args.interval:
                 time.sleep(0.005)
-
             sys.stdout.write("\033[2K\033[1G")
             dt = time.monotonic_ns() - t0
     finally:
-        sender.send(None)
         # camera.RemoveStreamingCallback(callbackid)
-        writer.join()
-        sender.close()
         camera.DisableFastFrames()
 
     dt = time.monotonic_ns() - t0
@@ -265,6 +223,12 @@ def convert_all_videos(args):
 
         outputdir.mkdir(exist_ok=True)
         convert_lvi_to_tiff(src, outputdir)
+
+
+def _transform(im):
+    if im.ndim == 3:
+        return cv2.cvtColor(im, cv2.COLOR_BGR2GRAY).astype(im.dtype)
+    return im
 
 
 def convert_lvi_to_tiff(src: Path, outputdir: Path):
@@ -288,13 +252,6 @@ def convert_lvi_to_tiff(src: Path, outputdir: Path):
         shape = (int(T), H, W)
 
         def generator(im):
-            if im.ndim == 3:
-                _transform = lambda im: cv2.cvtColor(im, cv2.COLOR_BGR2GRAY).astype(
-                    im.dtype
-                )
-            else:
-                _transform = lambda im: im
-
             yield _transform(im)
             pbar.update(1)
             ret = cap.grab()

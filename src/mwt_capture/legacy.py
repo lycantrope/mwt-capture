@@ -107,10 +107,10 @@ from pathlib import Path
 import cv2
 import numpy as np
 import tifffile as tf
+import win32gui
 from lucam import API, Lucam
 from lucam.lucam import LucamError
 from tqdm import tqdm
-import win32gui
 
 
 @contextlib.contextmanager
@@ -120,6 +120,90 @@ def timer(msg="func"):
         yield
     finally:
         print(f"{msg}|{time.monotonic() - t0:.3f} (sec)")
+
+
+def _transform(im):
+    if im.ndim == 3:
+        return cv2.cvtColor(im, cv2.COLOR_BGR2GRAY).astype(im.dtype)
+    return im
+
+
+class FileWriter(mp.Process):
+    def __init__(self, outputfile: Path, nframe: int, interval: float, pipe):
+        super().__init__(daemon=True)
+        self.outputfile = outputfile
+        self.nframe = nframe
+        self.interval = interval
+        self.pipe = pipe
+
+    def run(self):
+        try:
+            # get first image to obtain image shape and dtype
+            im = self.pipe.recv()
+            if im is None:
+                return
+
+            dtype = im.dtype
+            height, width = im.shape[:2]
+
+            def generator(im):
+                yield _transform(im)
+
+                while True:
+                    im = self.pipe.recv()
+                    if im is None:
+                        return
+                    yield _transform(im)
+
+            tf.imwrite(
+                self.outputfile,
+                generator(im),
+                imagej=True,
+                dtype=dtype,
+                shape=(self.nframe, height, width),
+                metadata={"axes": "TYX", "fps": 1.0 / self.interval},
+            )
+        except EOFError:  # Catch EOFError if the connection was closed.
+            ...
+
+
+class FileWriter(mp.Process):
+    def __init__(self, outputfile: Path, nframe: int, interval: float, pipe):
+        super().__init__(daemon=True)
+        self.outputfile = outputfile
+        self.nframe = nframe
+        self.interval = interval
+        self.pipe = pipe
+
+    def run(self):
+        try:
+            # get first image to obtain image shape and dtype
+            im = self.pipe.recv()
+            if im is None:
+                return
+
+            dtype = im.dtype
+            height, width = im.shape[:2]
+
+            def generator(im):
+                yield _transform(im)
+
+                while True:
+                    im = self.pipe.recv()
+                    if im is None:
+                        return
+                    yield _transform(im)
+
+            tf.imwrite(
+                self.outputfile,
+                generator(im),
+                imagej=True,
+                dtype=dtype,
+                shape=(self.nframe, height, width),
+                metadata={"axes": "TYX", "fps": 1.0 / self.interval},
+            )
+        except EOFError:  # Catch EOFError if the connection was closed.
+            ...
 
 
 class CameraStreamer(mp.Process):
