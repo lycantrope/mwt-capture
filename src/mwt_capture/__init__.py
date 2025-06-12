@@ -195,7 +195,7 @@ def capture(args):
             sys.stdout.flush()
             tmp = time.monotonic()
             camera.TakeFastFrame(imstack[i])
-            outputfile.flush()
+            imstack.flush()
             # idling if the TakeVideo is faster than interval
             while time.monotonic() - tmp + 0.005 < args.interval:
                 cv2.waitKey(5)
