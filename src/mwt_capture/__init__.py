@@ -170,7 +170,7 @@ def capture(args):
         print(properties, file=f)
 
     # Create memmap to hold data.
-    outputfile = tf.memmap(
+    imstack = tf.memmap(
         outputfile,
         shape=(args.nframe, IM_HEIGHT, IM_WIDTH),
         imagej=True,
@@ -193,9 +193,7 @@ def capture(args):
             sys.stdout.write(msg)
             sys.stdout.flush()
             tmp = time.monotonic()
-            buf = camera.TakeFastFrame()
-            buf = _transform(buf)
-            outputfile[i, :, :] = buf
+            camera.TakeFastFrame(imstack[i])
             outputfile.flush()
             # idling if the TakeVideo is faster than interval
             while time.monotonic() - tmp + 0.005 < args.interval:
@@ -204,7 +202,9 @@ def capture(args):
             dt = time.monotonic_ns() - t0
     finally:
         # camera.RemoveStreamingCallback(callbackid)
+        imstack.flush()
         camera.DisableFastFrames()
+        del imstack
 
     dt = time.monotonic_ns() - t0
     msg = f"Elapse Time: {dt*1e-9:.3f} (sec)"
