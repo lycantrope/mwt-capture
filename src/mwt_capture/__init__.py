@@ -61,7 +61,7 @@ class Args:
     gain: float
 
     def to_text(self):
-        return "\n".join(f"{slot},{getattr(self, slot)}" for slot in self.__slots__)
+        return "\n".join(f"{slot}={getattr(self, slot)}" for slot in self.__slots__)
 
 
 def init_camera(exposure: float, gain: float, *, interval=None):
@@ -85,11 +85,24 @@ def init_camera(exposure: float, gain: float, *, interval=None):
         binningY=1,
         flagsY=1,
     )
+
     properties.timeout = max(properties.timeout, exposure * 2.0)
-    framerate = 8.0
-    if interval is not None and interval > 0.0:
-        framerate = 1.0 / interval if interval is not None and interval > 0.0 else 8.0
-        properties.timeout = max(properties.timeout, (interval * 1e3 + exposure) * 2.0)
+    used_video_mode = True
+    if interval is None:
+        interval = 0.12
+    elif interval < 0.3:
+        print(
+            "Camera will take images using video mode. The interval will be fixed to 0.285 (3.5fps) or 0.142(7fps)."
+        )
+        if interval < 0.285:
+            interval = 0.12
+        else:
+            interval = 0.24
+    else:
+        used_video_mode = False
+
+    framerate = min(1.0 / interval, 7.0)
+    properties.timeout = max(properties.timeout, (interval * 1e3 + exposure) * 2.0)
 
     camera.SetFormat(
         pix_fmt,
@@ -99,11 +112,11 @@ def init_camera(exposure: float, gain: float, *, interval=None):
     # set exposure and gain
     camera.set_properties(exposure=exposure, gain=gain)
 
-    return camera, properties
+    return camera, properties, used_video_mode
 
 
 def preview(args):
-    camera, properties = init_camera(args.exposure, args.gain)
+    camera, properties, _ = init_camera(args.exposure, args.gain)
 
     try:
         winname = b"Preview"
@@ -150,7 +163,18 @@ def preview(args):
 def capture(args):
     args = {k: v for k, v in vars(args).items() if k in Args.__slots__}
     args = Args(**args)
-    camera, properties = init_camera(args.exposure, args.gain, interval=args.interval)
+
+    camera, properties, used_video_mode = init_camera(
+        args.exposure,
+        args.gain,
+        interval=args.interval,
+    )
+
+    # True frame rate set in camera
+    _, framerate = camera.GetFormat()
+
+    framerate = min(max(1.0 / args.interval, 7.0), framerate)
+    # framerate
     #  timeout (ms) = interval (sec) * 2000.0
     print(properties)
 
@@ -163,54 +187,80 @@ def capture(args):
 
     outputfile = args.outdir.joinpath(filename)
     param_names = outputfile.stem + "_params.txt"
-
     with outputfile.with_name(param_names).open("w") as f:
-        print("### CMD INPUT ARGUMENTS", file=f)
+        print("### CMD INPUT ARGUMENTS ###", file=f)
         print(args.to_text(), file=f)
-        print("### CAMERA PROPERTIES", file=f)
+        print(f"framerate={framerate}", file=f)
+        print("### CAMERA PROPERTIES ###", file=f)
         print(properties, file=f)
 
-    # Create memmap to hold data.
-    imstack = tf.memmap(
-        outputfile,
-        shape=(args.nframe, IM_HEIGHT, IM_WIDTH),
-        imagej=True,
-        dtype="u1",
-        metadata={"axes": "TYX", "fps": 1.0 / args.interval},
-    )
-
-    if args.interval < 0.35:
-        print("This scripts did not support interval < 0.35 sec)")
-        return
-
     try:
-        properties.shutterType = API.LUCAM_SHUTTER_TYPE_GLOBAL
-        camera.EnableFastFrames(properties)
-        t0 = time.monotonic_ns()
-        # begin
-        dt = 0.0
-        for i in range(args.nframe):
-            msg = f"Elapse Time: {dt*1e-9:.3f} (sec); Frame: {i+1:d}/{args.nframe:d}"
+        # Create memmap to hold data.
+        imstack = tf.memmap(
+            outputfile,
+            shape=(args.nframe, IM_HEIGHT, IM_WIDTH),
+            imagej=True,
+            dtype="u1",
+            metadata={"axes": "TYX", "fps": framerate},
+        )
+        if used_video_mode:
+            video_mode(camera, imstack)
+        else:
+            properties.shutterType = API.LUCAM_SHUTTER_TYPE_GLOBAL
+            camera.EnableFastFrames(properties)
+            snap_mode(camera, imstack, args.interval)
+            camera.DisableFastFrames()
+    finally:
+        imstack.flush()
+        del imstack
+    print(f"TIFF file was save at: {outputfile}")
+
+
+def snap_mode(camera, imstack, interval):
+    nframe = imstack.shape[0]
+    # Take a frame, and discard it
+    camera.TakeFastFrame(validate=False)
+    t0 = time.monotonic()
+    # begin
+    dt = 0.0
+    for i in range(nframe):
+        msg = f"\033[2K\033[1GElapse Time: {dt:.3f} (sec); Frame: {i + 1:d}/{nframe:d}"
+        sys.stdout.write(msg)
+        sys.stdout.flush()
+        tmp = time.monotonic()
+        camera.TakeFastFrame(imstack[i], validate=False)
+        imstack.flush()
+        # idling if the TakeVideo is faster than interval
+        while time.monotonic() - tmp + 0.008 < interval:
+            cv2.waitKey(8)
+        dt = time.monotonic() - t0
+
+    msg = f"Elapse Time: {dt:.3f} (sec)"
+    print(msg)
+
+
+def video_mode(camera, imstack):
+    nframe = imstack.shape[0]
+    t0 = time.monotonic()
+    counts = iter(range(nframe))
+
+    def streaming_callback(context, data, size):
+        try:
+            i = next(counts) + 1
+            dt = time.monotonic() - t0
+            msg = f"Elapse Time: {dt:.3f} (sec); Frame: {i:d}/{nframe:d}\n"
             sys.stdout.write(msg)
             sys.stdout.flush()
-            tmp = time.monotonic()
-            camera.TakeFastFrame(imstack[i])
-            imstack.flush()
-            # idling if the TakeVideo is faster than interval
-            while time.monotonic() - tmp + 0.005 < args.interval:
-                cv2.waitKey(5)
-            sys.stdout.write("\033[2K\033[1G")
-            dt = time.monotonic_ns() - t0
-    finally:
-        # camera.RemoveStreamingCallback(callbackid)
-        imstack.flush()
-        camera.DisableFastFrames()
-        del imstack
+        except StopIteration:
+            dt = time.monotonic() - t0
+            msg = f"\nElapse Time: {dt:.3f} (sec)"
+            print(msg)
 
-    dt = time.monotonic_ns() - t0
-    msg = f"Elapse Time: {dt*1e-9:.3f} (sec)"
-    print(msg)
-    print(f"TIFF file was save at: {outputfile}")
+    callback_id = camera.AddStreamingCallback(streaming_callback)
+    camera.StreamVideoControl("start_streaming")  # streaming without display
+    camera.TakeVideo(nframe, imstack)
+    camera.StreamVideoControl("stop_streaming")
+    camera.RemoveStreamingCallback(callback_id)
 
 
 def convert_all_videos(args):
