@@ -23,7 +23,7 @@ build-backend = "hatchling.build"
 
 [tool.uv]
 managed = true
-dev-dependencies = ["ipykernel", "ipython"]
+dev-dependencies = ["ipykernel", "ipython", "ruff"]
 
 [tool.hatch.metadata]
 allow-direct-references = true
