@@ -21,12 +21,12 @@ IM_HEIGHT = 1944
 
 
 def idling(second: float):
-    t0 = time.monotonic_ns()
+    t0 = time.monotonic()
     for b in itertools.cycle("|/-\\"):
-        dt = time.monotonic_ns() - t0
-        if dt >= second * 1e9:
+        dt = time.monotonic() - t0
+        if dt >= second:
             break
-        msg = f"Start Capture after: {(second - dt/1e9):.2f}s {b}"
+        msg = f"Start Capture after: {(second - dt):.2f}s {b}"
         sys.stdout.write(msg)
         sys.stdout.flush()
         cv2.waitKey(50)
